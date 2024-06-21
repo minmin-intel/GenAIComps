@@ -32,6 +32,8 @@ from comps.cores.mega.gateway import (
     CodeTransGateway,
     DocSumGateway,
     TranslationGateway,
+    RAGToolGateway,
+    RetrievalToolGateway
 )
 
 # Telemetry
