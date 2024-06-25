@@ -22,3 +22,7 @@ def get_tools_descriptions(file_dir_path: str):
         sys.modules["custom_tools"] = module
         spec.loader.exec_module(module)
         return module.tools_descriptions()
+
+def get_tools_that_require_human_authorization(tools):
+    # tools is a list of parsed Pydantic models
+    return [tool for tool in tools if tool.require_human_authorization]

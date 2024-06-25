@@ -5,8 +5,9 @@ from typing import List, Tuple, TypedDict, Union
 
 from langgraph.graph import END, StateGraph
 
-from .tools import get_tools_descriptions
+from .tools import get_tools_descriptions, get_tools_that_require_human_authorization
 from .utils import setup_llm
+from .memory import setup_memory
 
 
 def instantiate_agent(args, strategy="react"):
@@ -56,6 +57,44 @@ class ReActAgentwithLangchain(BaseAgent):
             agent=agent_chain, tools=self.tools_descriptions, verbose=True, handle_parsing_errors=True
         )
 
+class BaseAgentHumanInLoop:
+    def __init__(self, args) -> None:
+        self.llm_endpoint = setup_llm(args)
+        self.tools_descriptions = get_tools_descriptions(args.tools)
+        self.memory = setup_memory(args)
+        # self.tools_require_human_authorization = get_tools_that_require_human_authorization(args.tools)
+        # self.interupt_before = ["sensitive_tools"]
+        self.app = None
+        # print(self.tools_descriptions)
+
+    def compile(self):
+        pass
+
+    def execute(self, state: dict):
+        pass
+
+class ReActAgentHumanAuthorizeAllTools(BaseAgentHumanInLoop):
+    def __init__(self, args):
+        super().__init__(args)
+        # from langchain import hub
+        # from langchain.agents import AgentExecutor, create_react_agent
+
+        # prompt = hub.pull("hwchase17/react")
+        # agent_chain = create_react_agent(self.llm_endpoint, self.tools_descriptions, prompt)
+        # self.app = AgentExecutor(
+        #     agent=agent_chain, tools=self.tools_descriptions, verbose=True, handle_parsing_errors=True
+        # )
+        # ref: https://github.com/langchain-ai/langgraph/blob/main/libs/langgraph/langgraph/prebuilt/chat_agent_executor.py#L167
+        from langgraph.prebuilt import create_react_agent
+        # tools: need to be a list of functions with @tool decorator or Pydantic models
+        # need to write a function that converts tools.yaml into Pydantic models
+        # tools: A list of tools or a ToolExecutor instance.
+        self.app = create_react_agent(self.llm_endpoint, 
+                                   tools=tools, # tools will be binded to llm with model.bind_tools()
+                                   checkpointer = self.memory,
+                                   interrupt_before = ["tools"], # will interrupt any tool calls or not interrupt - limitation of this api
+                                   ) # returns a compiled graph
+        
 
 class PlanExecuteAgentWithLangGraph(BaseAgent):
     def __init__(self, args):
@@ -293,3 +332,94 @@ class PlanExecuteAgentWithLangGraph(BaseAgent):
             return True
         else:
             return False
+
+
+class PlanExecuteAgentHumanInLoop(PlanExecuteAgentWithLangGraph):
+    def __init__(self, args):    
+        from .planexec.planner import create_planner
+
+        self.llm_endpoint = setup_llm(args)
+        self.tools_descriptions = get_tools_descriptions(args.tools)
+        self.app = None
+
+        self.valid_tools, self.valid_args = self.get_valid_tools_and_args()
+
+        self.planner = create_planner(args, self.llm_endpoint, self.tools_descriptions, planner_type="initial_plan")
+        self.plan_rewriter = create_planner(
+            args, self.llm_endpoint, self.tools_descriptions, planner_type="plan_rewriter"
+        )
+        self.replanner = create_planner(args, self.llm_endpoint, self.tools_descriptions, planner_type="replanner")
+
+        self.args = args
+        self.debug = args.debug
+
+        self.tools_require_human_authorization = get_tools_that_require_human_authorization(args.tools)
+        self.interupt_before = ["sensitive_tools"]
+
+        self.app = self.compile_workflow() # need to rewrite this function
+
+        if self.app is None:
+            raise ValueError("Failed to compile the app")
+    
+    def compile_workflow(self):
+
+        workflow = StateGraph(BaseAgentState)
+
+        # Add the plan node
+        workflow.add_node("planner", self.plan_step)
+
+        # add plan checker node
+        workflow.add_node("plan_checker", self.check_plan)
+
+        # add plan rewrite node
+        workflow.add_node("rewriter", self.rewrite_plan)
+
+        # Add the execution step
+        workflow.add_node("executor", self.execute_step)
+
+        # Add a replan node
+        workflow.add_node("replan", self.replan_step)
+
+        workflow.set_entry_point("planner")
+
+        # From plan we go to plan check
+        workflow.add_edge("planner", "plan_checker")
+
+        # add conditional edge between plan checker and rewrite,
+        # as well as plan checker and executor
+        workflow.add_conditional_edges(
+            "plan_checker",
+            self.should_rewrite_plan,
+            {
+                True: "rewriter",
+                False: "executor",
+            },
+        )
+
+        # From rewriter, we go to plan checker
+        workflow.add_edge("rewriter", "plan_checker")
+
+        # From executor, we replan
+        workflow.add_edge("executor", "replan")
+
+        workflow.add_conditional_edges(
+            "replan",
+            # Next, we pass in the function that will determine which node is called next.
+            self.should_end,
+            {
+                # If `tools`, then we call the tool node.
+                True: END,
+                False: "plan_checker",
+            },
+        )
+
+        workflow.add_node("sensitive_tools", self.sensitive_tools)
+        # add_node(
+        #     "sensitive_tools", create_tool_node_with_fallback(part_3_sensitive_tools)
+        # )
+        # builder.add_node("safe_tools", create_tool_node_with_fallback(part_3_safe_tools))
+        
+        # Finally, we compile it!
+        # This compiles it into a LangChain Runnable,
+        # meaning you can use it as you would any other runnable
+        return workflow.compile(checkpointer = self.memory, interrupt_before = self.interupt_before)
