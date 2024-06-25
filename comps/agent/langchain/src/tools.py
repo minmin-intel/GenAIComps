@@ -138,3 +138,8 @@ def get_tools_descriptions(file_dir_path: str):
         else:
             pass
     return tools
+
+def get_tools_that_require_human_authorization(tools):
+    # tools is a list of parsed Pydantic models
+    return [tool for tool in tools if tool.require_human_authorization]
+
