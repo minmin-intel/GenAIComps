@@ -88,13 +88,18 @@ def load_langchain_tool(tool_setting_tuple):
     env = tool_setting["env"] if "env" in tool_setting else None
     pip_dependencies = tool_setting["pip_dependencies"] if "pip_dependencies" in tool_setting else None
     func_definition = load_func_str(tool_setting["callable_api"], env, pip_dependencies)
-    if "args_schema" not in tool_setting or "description" not in tool_setting:
-        if isinstance(func_definition, BaseTool):
-            return func_definition
-        else:
-            raise ValueError(
-                f"Tool {tool_name} is missing 'args_schema' or 'description' in the tool setting. Tool is {func_definition}"
-            )
+    # if "args_schema" not in tool_setting or "description" not in tool_setting:
+    #     if isinstance(func_definition, BaseTool):
+    #         return func_definition
+    #     else:
+    #         raise ValueError(
+    #             f"Tool {tool_name} is missing 'args_schema' or 'description' in the tool setting. Tool is {func_definition}"
+    #         )
+    # print(tool_setting)
+    # func_definition = load_func_str(tool_setting["callable_api"])
+    if isinstance(func_definition, BaseTool):
+        func_definition.metadata={"require_human_authorization": tool_setting["require_human_authorization"]}
+        return func_definition
     else:
         func_inputs = load_func_args(tool_name, tool_setting["args_schema"])
         return StructuredTool(
@@ -102,6 +107,7 @@ def load_langchain_tool(tool_setting_tuple):
             description=tool_setting["description"],
             func=func_definition,
             args_schema=func_inputs,
+            metadata={"require_human_authorization": tool_setting["require_human_authorization"]}
         )
 
 
@@ -140,6 +146,8 @@ def get_tools_descriptions(file_dir_path: str):
     return tools
 
 def get_tools_that_require_human_authorization(tools):
-    # tools is a list of parsed Pydantic models
-    return [tool for tool in tools if tool.require_human_authorization]
+    # tools is a list of StructuredTool
+    return [tool for tool in tools if tool.metadata["require_human_authorization"]]
+
+   
 

@@ -1,12 +1,16 @@
 # Copyright (C) 2024 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
-google-finance:
-  callable_api: google-finance
-  env: SERPAPI_API_KEY=b947460aa11905c9c71ff90bc70677919c0a564225ec1d39e51a605d96b63f1f
-  pip_dependencies: google-search-results>=2.4.2
 duckduckgo_search:
-  callable_api: ddg-search
+  description: search the web with duckduckgo
+  callable_api: langchain_community.tools.DuckDuckGoSearchRun
+  args_schema:
+    query:
+      type: str
+      description: user query
+  return_output: search_result
+  require_human_authorization: false
+
 propriety_info_retrieval:
   description: Retrieves the propriety information for the given entity
   callable_api: http://localhost:9090/v1/rag_retrieval
@@ -15,6 +19,7 @@ propriety_info_retrieval:
       type: str
       description: Question query to get related propriety information
   return_output: propriety_info
+  require_human_authorization: true
 # interest_calculator:
 #   description: Calculates the interest for the given principal amount, rate of interest and time period
 #   callable_api: tools/custom_tools.py:interest_calculator
@@ -37,6 +42,7 @@ ticker_lookup:
       type: str
       description: The name of the stock, ETF, or index.
   return_output: ticker_symbol
+  require_human_authorization: false
 # get_trade_info:
 #   description: This function returns a single piece of information from the trading aggregates for a SINGLE stock or index ticker. The information can be open_price, close_price, low_price, high_price, average_price, trading_volume, num_transaction. No other info can be obtained with this tool.
 #   callable_api: tools/custom_tools.py:get_trade_info

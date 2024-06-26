@@ -8,7 +8,7 @@ from langgraph.graph import END, StateGraph
 from .tools import get_tools_descriptions
 from .utils import has_multi_tool_inputs, setup_llm, tool_renderer
 
-from .tools import get_tools_that_require_human_authorization
+from .tools import get_tools_that_require_human_authorization, load_yaml_tools
 from .memory import setup_memory
 
 
@@ -17,6 +17,8 @@ def instantiate_agent(args, strategy="react"):
         return ReActAgentwithLangchain(args)
     elif strategy == "planexec":
         return PlanExecuteAgentWithLangGraph(args)
+    elif strategy == "react_human_authorize_all_tools":
+        return ReActAgentHumanAuthorizeAllTools(args)
     else:
         return BaseAgent(args)
 
@@ -69,7 +71,7 @@ class ReActAgentwithLangchain(BaseAgent):
 class BaseAgentHumanInLoop:
     def __init__(self, args) -> None:
         self.llm_endpoint = setup_llm(args)
-        self.tools_descriptions = get_tools_descriptions(args.tools)
+        self.tools = load_yaml_tools(args.tools)
         self.memory = setup_memory(args)
         # self.tools_require_human_authorization = get_tools_that_require_human_authorization(args.tools)
         # self.interupt_before = ["sensitive_tools"]
@@ -99,7 +101,7 @@ class ReActAgentHumanAuthorizeAllTools(BaseAgentHumanInLoop):
         # need to write a function that converts tools.yaml into Pydantic models
         # tools: A list of tools or a ToolExecutor instance.
         self.app = create_react_agent(self.llm_endpoint, 
-                                   tools=tools, # tools will be binded to llm with model.bind_tools()
+                                   tools=self.tools, # tools will be binded to llm with model.bind_tools()
                                    checkpointer = self.memory,
                                    interrupt_before = ["tools"], # will interrupt any tool calls or not interrupt - limitation of this api
                                    ) # returns a compiled graph

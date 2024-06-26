@@ -79,6 +79,7 @@ def test_agent_http(args):
     traces = []
     for _, row in df.iterrows():
         ret = process_request(row["query"])
+        print('response:', ret)
         trace = {"query": row["query"], "trace": ret}
         traces.append(trace)
 
@@ -105,8 +106,9 @@ if __name__ == "__main__":
     parser.add_argument("--filedir", type=str, default="./", help="test file directory")
     parser.add_argument("--filename", type=str, default="query.csv", help="query_list_file")
     parser.add_argument("--output", type=str, default="output.csv", help="query_list_file")
-    parser.add_argument("--strategy", type=str, default="react", choices=["react", "planexec"])
+    parser.add_argument("--strategy", type=str, default="react", choices=["react", "planexec", "react_human_authorize_all_tools"])
     parser.add_argument("--ut", action="store_true", help="ut")
+    parser.add_argument("--memory_type", type=str, default="in-memory", choices=["sqlite", "in-memory"], help="memory type")
 
     args, _ = parser.parse_known_args()
 
