@@ -1,6 +1,6 @@
 AGENT_NAME=finance_researcher
 strategy=react
-llm_endpoint_url=http://100.83.111.250:8080
+llm_endpoint_url=http://localhost:9009
 llm_engine=tgi
 recursive_limit=20
 require_human_feedback=true

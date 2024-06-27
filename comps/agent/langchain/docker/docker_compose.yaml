@@ -1,0 +1,38 @@
+services:
+  tgi_service:
+      image: ghcr.io/huggingface/text-generation-inference:1.4
+      container_name: tgi-service
+      ports:
+        - "9009:80"
+      volumes:
+        - "/localdisk/minminho/hf_cache:/data"
+      shm_size: 1g
+      environment:
+        no_proxy: ${no_proxy}
+        http_proxy: ${http_proxy}
+        https_proxy: ${https_proxy}
+        HF_TOKEN: ${HUGGINGFACEHUB_API_TOKEN}
+        HF_HUB_DISABLE_PROGRESS_BARS: 1
+        HF_HUB_ENABLE_HF_TRANSFER: 0
+      command: --model-id ${LLM_MODEL_ID}
+  agent_server:
+      image: opea/comps-agent-langchain:latest
+      container_name: agent_server
+      depends_on:
+        - tgi_service
+      ports:
+        - "9090:9090"
+      volumes:
+        - "/localdisk/minminho/GenAIComps/comps/agent/langchain/:/home/user/comps/agent/langchain/"
+      environment:
+        no_proxy: ${no_proxy}
+        http_proxy: ${http_proxy}
+        https_proxy: ${https_proxy}
+        HUGGINGFACEHUB_API_TOKEN: ${HUGGINGFACEHUB_API_TOKEN}
+      ipc: host
+      env_file: /localdisk/minminho/GenAIComps/comps/agent/langchain/AGENT_ENV
+
+networks:
+  default:
+    driver: bridge
+    

@@ -125,7 +125,8 @@ def get_args():
     parser.add_argument("--debug", action="store_true", help="Test with endpoint mode")
     parser.add_argument("--is_coordinator", action="store_true", help="if this agent is a coordinator")
     parser.add_argument("--require_human_feedback", action="store_true", help="If this agent requires human feedback")
-    parser.add_argument("--llm_endpoint_url", type=str, default="http://localhost:8080")
+    parser.add_argument("--llm_endpoint_url", type=str, default="http://localhost:9009")
+    parser.add_argument("--memory_type", type=str, default="in-memory", choices=["sqlite", "in-memory"], help="memory type")
 
     sys_args, unknown_args = parser.parse_known_args()
     # print("env_config: ", env_config)

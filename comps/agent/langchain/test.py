@@ -108,13 +108,14 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=str, default="output.csv", help="query_list_file")
     parser.add_argument("--strategy", type=str, default="react", choices=["react", "planexec", "react_human_authorize_all_tools"])
     parser.add_argument("--ut", action="store_true", help="ut")
-    parser.add_argument("--memory_type", type=str, default="in-memory", choices=["sqlite", "in-memory"], help="memory type")
 
     args, _ = parser.parse_known_args()
 
     for key, value in vars(args1).items():
         setattr(args, key, value)
 
+    print(args)
+    
     if args.local_test:
         test_agent_local(args)
     elif args.endpoint_test:

@@ -17,7 +17,7 @@ def instantiate_agent(args, strategy="react"):
         return ReActAgentwithLangchain(args)
     elif strategy == "planexec":
         return PlanExecuteAgentWithLangGraph(args)
-    elif strategy == "react_human_authorize_all_tools":
+    elif strategy == "react" and args.require_human_feedback == True:
         return ReActAgentHumanAuthorizeAllTools(args)
     else:
         return BaseAgent(args)
