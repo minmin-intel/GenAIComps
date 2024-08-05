@@ -61,7 +61,7 @@ def retrieve(input: EmbedDoc768) -> SearchedDoc:
     searched_docs = []
     for r in search_res:
         searched_docs.append(TextDoc(text=r.page_content))
-    result = SearchedDoc(retrieved_docs=searched_docs, initial_query=input.text)
+    result = SearchedDoc(retrieved_docs=searched_docs, initial_query=input.text, top_n=2) # tells reranker to get top2
     statistics_dict["opea_service@retriever_redis"].append_latency(time.time() - start, None)
     return result
 

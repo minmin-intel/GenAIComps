@@ -33,7 +33,7 @@ def embedding(input: TextDoc) -> EmbedDoc768:
     start = time.time()
     embed_vector = embeddings.embed_query(input.text)
     embed_vector = embed_vector[:768]  # Keep only the first 768 elements
-    res = EmbedDoc768(text=input.text, embedding=embed_vector)
+    res = EmbedDoc768(text=input.text, embedding=embed_vector, k=10) # tells retriever to get top 10 results
     statistics_dict["opea_service@embedding_tei_langchain"].append_latency(time.time() - start, None)
     return res
 
