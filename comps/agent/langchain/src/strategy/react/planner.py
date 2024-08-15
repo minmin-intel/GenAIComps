@@ -12,6 +12,14 @@ from ...utils import has_multi_tool_inputs, tool_renderer
 from ..base_agent import BaseAgent
 from .prompt import REACT_SYS_MESSAGE, hwchase17_react_prompt
 
+from langchain_core.messages import AIMessage
+
+def get_num_llm_calls(state):
+    n = 0
+    for m in state["messages"]:
+        if isinstance(m, AIMessage):
+            n+=1
+    return n
 
 class ReActAgentwithLangchain(BaseAgent):
     def __init__(self, args):
@@ -92,6 +100,7 @@ class ReActAgentwithLanggraph(BaseAgent):
 
             last_message = s["messages"][-1]
             print("******Response: ", last_message.content)
-            return last_message.content
+            num_llm_calls = get_num_llm_calls(s)
+            return last_message.content, num_llm_calls
         except Exception as e:
             return str(e)

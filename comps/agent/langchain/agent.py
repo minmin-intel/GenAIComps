@@ -12,7 +12,7 @@ cur_path = pathlib.Path(__file__).parent.resolve()
 comps_path = os.path.join(cur_path, "../../../")
 sys.path.append(comps_path)
 
-from comps import GeneratedDoc, LLMParamsDoc, ServiceType, opea_microservices, register_microservice
+from comps import AgentStateDoc, LLMParamsDoc, ServiceType, opea_microservices, register_microservice
 from comps.agent.langchain.src.agent import instantiate_agent
 from comps.agent.langchain.src.utils import get_args
 
@@ -43,10 +43,10 @@ async def llm_generate(input: LLMParamsDoc):
     else:
         # TODO: add support for non-streaming mode
         print("-----------NOT STREAMING-------------")
-        response = await agent_inst.non_streaming_run(input.query, config)
+        response, num_llm_calls = await agent_inst.non_streaming_run(input.query, config)
         print("-----------Response-------------")
         print(response)
-        return GeneratedDoc(text=response, prompt=input.query)
+        return AgentStateDoc(text=response, prompt=input.query, num_llm_calls=num_llm_calls)
 
 
 if __name__ == "__main__":

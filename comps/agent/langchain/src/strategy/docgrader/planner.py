@@ -26,9 +26,9 @@ class AgentState(TypedDict):
     # The add_messages function defines how an update should be processed
     # Default is to replace. add_messages says "append"
     messages: Annotated[Sequence[BaseMessage], add_messages]
-    output: str
     doc_score: str
     query_time: str
+    num_llm_calls: int
 
 
 class RagAgent:
@@ -54,7 +54,7 @@ class RagAgent:
 
         response = self.llm.invoke(messages)
         # We return a list, because this will get added to the existing list
-        return {"messages": [response], "output": response}
+        return {"messages": [response], "num_llm_calls": state["num_llm_calls"] + 1}
 
 
 class Retriever:
@@ -106,12 +106,12 @@ class DocumentGrader:
 
         if score.startswith("yes"):
             print("---DECISION: DOCS RELEVANT---")
-            return {"doc_score": "generate"}
+            return {"doc_score": "generate", "num_llm_calls": state["num_llm_calls"]+1}
 
         else:
             print(f"---DECISION: DOCS NOT RELEVANT, score is {score}---")
 
-            return {"messages": [HumanMessage(content=instruction)], "doc_score": "rewrite"}
+            return {"messages": [HumanMessage(content=instruction)], "doc_score": "rewrite", "num_llm_calls": state["num_llm_calls"]+1}
 
 
 class TextGenerator:
@@ -150,7 +150,7 @@ class TextGenerator:
         response = self.rag_chain.invoke({"context": docs, "question": question, "time": query_time})
         print("@@@@ Used this doc for generation:\n", docs)
         print("@@@@ Generated response: ", response)
-        return {"messages": [response], "output": response}
+        return {"messages": [response], "num_llm_calls": state["num_llm_calls"]+1}
 
 
 class RAGAgentDocGrader(BaseAgent):
@@ -212,7 +212,7 @@ class RAGAgentDocGrader(BaseAgent):
             return False
 
     def prepare_initial_state(self, query):
-        return {"messages": [HumanMessage(content=query)]}
+        return {"messages": [HumanMessage(content=query)], "num_llm_calls": 0}
 
     async def stream_generator(self, query, config):
         initial_state = self.prepare_initial_state(query)
@@ -241,6 +241,6 @@ class RAGAgentDocGrader(BaseAgent):
 
             last_message = s["messages"][-1]
             print("******Response: ", last_message.content)
-            return last_message.content
+            return last_message.content, s["num_llm_calls"]
         except Exception as e:
-            return str(e)
+            return str(e), None

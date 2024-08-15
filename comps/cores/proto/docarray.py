@@ -71,6 +71,11 @@ class GeneratedDoc(BaseDoc):
     text: str
     prompt: str
 
+class AgentStateDoc(BaseDoc):
+    text: str
+    prompt: str
+    num_llm_calls: int
+
 
 class RerankedDoc(BaseDoc):
     reranked_docs: DocList[TextDoc]
