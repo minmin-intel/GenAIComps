@@ -34,3 +34,23 @@ RAG_PROMPT = ChatPromptTemplate.from_messages(
         ),
     ]
 )
+
+
+QueryWriterLlamaPrompt = """\
+Given the user question, think step by step.  
+If you can answer the question without searching the knowledge base, provide your answer.
+
+If you need to search for information in the knowledge base, provide the search query. 
+Decompose a complex question into a set of simple tasks, and issue search queries for each task.
+Here is the history of search queries that you have issued.
+{history}
+Here are the feedback for the documents retrieved with your search queries.
+{feedback}
+What are the new queries that you should issue to the knowledge base to answer the user question?
+
+Follow the instructions below to format your output.
+{format_instructions}
+
+User Question: {question}
+Your Output:\n
+"""

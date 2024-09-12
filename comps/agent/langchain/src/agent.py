@@ -16,9 +16,12 @@ def instantiate_agent(args, strategy="react_langchain", with_memory=False):
 
         return PlanExecuteAgentWithLangGraph(args, with_memory)
 
-    elif strategy == "rag_agent":
+    elif strategy == "rag_agent" or strategy == "rag_agent_llama":
         from .strategy.ragagent import RAGAgent
 
         return RAGAgent(args, with_memory)
+    elif strategy == "ragagentllama":
+        pass
+
     else:
         raise ValueError(f"Agent strategy: {strategy} not supported!")

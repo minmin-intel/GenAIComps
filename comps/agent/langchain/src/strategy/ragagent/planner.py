@@ -15,9 +15,11 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
+from langchain_core.output_parsers import JsonOutputParser
+
 
 from ..base_agent import BaseAgent
-from .prompt import DOC_GRADER_PROMPT, RAG_PROMPT
+from .prompt import DOC_GRADER_PROMPT, RAG_PROMPT, QueryWriterLlamaPrompt
 
 instruction = "Retrieved document is not sufficient or relevant to answer the query. Reformulate the query to search knowledge base again."
 MAX_RETRY = 3
@@ -160,7 +162,10 @@ class RAGAgent(BaseAgent):
 
         # Define Nodes
         document_grader = DocumentGrader(self.llm_endpoint, args.model)
-        query_writer = QueryWriter(self.llm_endpoint, args.model, self.tools_descriptions)
+        if args.strategy =="rag_agent":
+            query_writer = QueryWriter(self.llm_endpoint, args.model, self.tools_descriptions)
+        elif args.strategy == "rag_agent_llama":
+            query_writer = QueryWriterLlama(self.llm_endpoint, args.model)
         text_generator = TextGenerator(self.llm_endpoint)
         retriever = Retriever.create(self.tools_descriptions)
 
@@ -248,3 +253,55 @@ class RAGAgent(BaseAgent):
             return last_message.content
         except Exception as e:
             return str(e)
+
+
+class RetrievalToolCall(BaseModel):
+    query: str = Field(description="search query to be sent to the knowledge base.")
+    answer: str = Field(description="direct answer to user's question.")
+    
+
+class QueryWriterLlama:
+    """
+    Temporary workaround to use LLM with TGI-Gaudi.
+    Use custom output parser to parse text string from LLM into tool calls.
+    Only support one retrieval tool.
+    Only validated with llama3.1-70B-instruct.
+    Output of the chain is AIMessage.
+    Streaming=false is required for this chain.
+    """
+    def __init__(self, llm_endpoint, model_id):
+        output_parser = JsonOutputParser(pydantic_object=RetrievalToolCall)
+        print("Format instructions: ", output_parser.get_format_instructions())
+        prompt = PromptTemplate(
+            template=QueryWriterLlamaPrompt,
+            input_variables=["question", "history", "feedback"],
+            partial_variables={"format_instructions": output_parser.get_format_instructions()},
+        )
+        llm = ChatHuggingFace(llm=llm_endpoint, model_id=model_id)
+        
+        self.chain = prompt | llm | output_parser
+
+    def __call__(self, state):
+        from utils import convert_json_to_tool_call
+        print("---CALL QueryWriter---")
+        messages = state["messages"]
+
+        question = messages[0].content
+        history = ""
+        feedback = ""
+        # for m in messages:
+
+        response = self.chain.invoke({"question": question, "history": history, "feedback": feedback})
+
+        # if response is like
+        # {'query': 'Intel OPEA Project'}
+        # then we need to convert it to a ToolMessage
+        if "query" in response:
+            tool_call = convert_json_to_tool_call(response)
+            response = AIMessage(content="", additional_kwargs=tool_call)
+        else:
+            response = AIMessage(content=response["answer"])
+        # We return a list, because this will get added to the existing list
+        return {"messages": [response], "output": response}
+
+

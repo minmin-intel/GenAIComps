@@ -155,6 +155,49 @@ def test_ut(args):
     for tool in tools:
         print(tool)
 
+def test_local_ragagent_llama(args):
+    from src.strategy.ragagent.planner import QueryWriterLlama
+    from langchain_huggingface import HuggingFaceEndpoint
+    from langchain_core.messages import HumanMessage
+
+    host_ip = os.getenv("host_ip", "localhost")
+    port = os.getenv("port", 8085)
+    endpoint = f"http://{host_ip}:{port}"
+
+    generation_params = {
+        "max_new_tokens": args.max_new_tokens,
+        "top_k": args.top_k,
+        "top_p": args.top_p,
+        "temperature": args.temperature,
+        "repetition_penalty": args.repetition_penalty,
+        "return_full_text": args.return_full_text,
+        "streaming": args.streaming,
+    }
+
+    print("generation_params:\n", generation_params)
+
+    llm_endpoint = HuggingFaceEndpoint(
+        endpoint_url=endpoint,  ## endpoint_url = "localhost:8080",
+        task="text-generation",
+        **generation_params,
+    )
+    
+    model_id = "meta-llama/Meta-Llama-3.1-70B-Instruct"
+    # query_writer = QueryWriterLlama(llm_endpoint, model_id)
+    # query = "What is the Intel OPEA Project?"
+    # initial_state = {"messages": [HumanMessage(content=query)]}
+    # print(query_writer(initial_state))
+
+    agent = instantiate_agent(args, strategy=args.strategy)
+    app = agent.app
+
+    config = {"recursion_limit": args.recursion_limit}
+    initial_state = {"messages": [HumanMessage(content=query)]}
+    app.non_streaming_run(initial_state, config=config)
+
+    
+
+
 
 if __name__ == "__main__":
     args1, _ = get_args()
@@ -163,6 +206,7 @@ if __name__ == "__main__":
     parser.add_argument("--local_test", action="store_true", help="Test with local mode")
     parser.add_argument("--endpoint_test", action="store_true", help="Test with endpoint mode")
     parser.add_argument("--assistants_api_test", action="store_true", help="Test with endpoint mode")
+    parser.add_argument("--test_llama", action="store_true", help="test llama3.1 based ragagent")
     parser.add_argument("--q", type=int, default=0)
     parser.add_argument("--ip_addr", type=str, default="127.0.0.1", help="endpoint ip address")
     parser.add_argument("--query", type=str, default=None)
@@ -184,5 +228,7 @@ if __name__ == "__main__":
         test_ut(args)
     elif args.assistants_api_test:
         test_assistants_http(args)
+    elif args.test_llama:
+        test_local_ragagent_llama(args)
     else:
         print("Please specify the test type")
