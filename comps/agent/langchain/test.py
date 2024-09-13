@@ -155,10 +155,29 @@ def test_ut(args):
     for tool in tools:
         print(tool)
 
-def test_local_ragagent_llama(args):
+
+
+def non_streaming_run(agent, query, config):
+    initial_state = agent.prepare_initial_state(query)
+
+    for s in agent.app.stream(initial_state, config=config, stream_mode="values"):
+        # message = s["messages"][-1]
+        # if isinstance(message, tuple):
+        #     print(message)
+        # else:
+        #     message.pretty_print()
+        print(s["messages"])
+
+    last_message = s["messages"][-1]
+    print("******Response: ", last_message.content)
+    return last_message.content
+
+def test_query_writer_llama(args):
     from src.strategy.ragagent.planner import QueryWriterLlama
     from langchain_huggingface import HuggingFaceEndpoint
     from langchain_core.messages import HumanMessage
+
+    query = "What is the Intel OPEA Project?"
 
     host_ip = os.getenv("host_ip", "localhost")
     port = os.getenv("port", 8085)
@@ -183,17 +202,19 @@ def test_local_ragagent_llama(args):
     )
     
     model_id = "meta-llama/Meta-Llama-3.1-70B-Instruct"
-    # query_writer = QueryWriterLlama(llm_endpoint, model_id)
-    # query = "What is the Intel OPEA Project?"
-    # initial_state = {"messages": [HumanMessage(content=query)]}
-    # print(query_writer(initial_state))
-
-    agent = instantiate_agent(args, strategy=args.strategy)
-    app = agent.app
-
-    config = {"recursion_limit": args.recursion_limit}
+    query_writer = QueryWriterLlama(llm_endpoint, model_id)
     initial_state = {"messages": [HumanMessage(content=query)]}
-    app.non_streaming_run(initial_state, config=config)
+    print(query_writer(initial_state))
+
+def test_local_ragagent_llama(args):
+    from src.agent import instantiate_agent
+
+    # query = "What is the Intel OPEA Project?"
+    # query = "who has had more number one hits on the us billboard hot 100 chart, michael jackson or elvis presley?"
+    query = "what's the most recent album from the founder of ysl records?"
+    agent = instantiate_agent(args, strategy=args.strategy)
+    config = {"recursion_limit": args.recursion_limit}
+    response = non_streaming_run(agent, query, config)
 
     
 

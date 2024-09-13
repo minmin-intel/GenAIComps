@@ -4,7 +4,7 @@
 from typing import Annotated, Any, Literal, Sequence, TypedDict
 
 from langchain.output_parsers import PydanticOutputParser
-from langchain_core.messages import BaseMessage, HumanMessage, ToolMessage
+from langchain_core.messages import BaseMessage, HumanMessage, ToolMessage, AIMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.output_parsers.openai_tools import PydanticToolsParser
 from langchain_core.prompts import PromptTemplate
@@ -19,7 +19,7 @@ from langchain_core.output_parsers import JsonOutputParser
 
 
 from ..base_agent import BaseAgent
-from .prompt import DOC_GRADER_PROMPT, RAG_PROMPT, QueryWriterLlamaPrompt
+from .prompt import DOC_GRADER_PROMPT, RAG_PROMPT, QueryWriterLlamaPrompt, QueryWriterLlamaPrompt_multiquery
 
 instruction = "Retrieved document is not sufficient or relevant to answer the query. Reformulate the query to search knowledge base again."
 MAX_RETRY = 3
@@ -63,6 +63,8 @@ class QueryWriter:
 class Retriever:
     @classmethod
     def create(cls, tools_descriptions):
+        for tool in tools_descriptions:
+            print(tool.name)
         return ToolNode(tools_descriptions)
 
 
@@ -165,7 +167,7 @@ class RAGAgent(BaseAgent):
         if args.strategy =="rag_agent":
             query_writer = QueryWriter(self.llm_endpoint, args.model, self.tools_descriptions)
         elif args.strategy == "rag_agent_llama":
-            query_writer = QueryWriterLlama(self.llm_endpoint, args.model)
+            query_writer = QueryWriterLlama(self.llm_endpoint, args.model, self.tools_descriptions)
         text_generator = TextGenerator(self.llm_endpoint)
         retriever = Retriever.create(self.tools_descriptions)
 
@@ -264,44 +266,63 @@ class QueryWriterLlama:
     """
     Temporary workaround to use LLM with TGI-Gaudi.
     Use custom output parser to parse text string from LLM into tool calls.
-    Only support one retrieval tool.
+    Only support one tool. Does NOT support multiple tools.
     Only validated with llama3.1-70B-instruct.
     Output of the chain is AIMessage.
     Streaming=false is required for this chain.
+    Currently assumes each LLM output only has one tool call.
     """
-    def __init__(self, llm_endpoint, model_id):
-        output_parser = JsonOutputParser(pydantic_object=RetrievalToolCall)
-        print("Format instructions: ", output_parser.get_format_instructions())
+    def __init__(self, llm_endpoint, model_id, tools):
+        from .utils import QueryWriterLlamaOutputParser
+        assert len(tools) == 1, "Only support one tool, passed in {} tools".format(len(tools))
+        # output_parser = JsonOutputParser(pydantic_object=RetrievalToolCall)
+        output_parser = QueryWriterLlamaOutputParser()
+        # print("Format instructions: ", output_parser.get_format_instructions())
         prompt = PromptTemplate(
-            template=QueryWriterLlamaPrompt,
+            template=QueryWriterLlamaPrompt_multiquery,
             input_variables=["question", "history", "feedback"],
-            partial_variables={"format_instructions": output_parser.get_format_instructions()},
         )
         llm = ChatHuggingFace(llm=llm_endpoint, model_id=model_id)
-        
+        self.tools = tools
         self.chain = prompt | llm | output_parser
 
     def __call__(self, state):
-        from utils import convert_json_to_tool_call
+        from .utils import convert_json_to_tool_call, assemble_history
         print("---CALL QueryWriter---")
         messages = state["messages"]
 
         question = messages[0].content
-        history = ""
-        feedback = ""
-        # for m in messages:
+        history = assemble_history(messages)
+        feedback = instruction
 
         response = self.chain.invoke({"question": question, "history": history, "feedback": feedback})
+        print("Response from query writer llm: ", response)
 
-        # if response is like
-        # {'query': 'Intel OPEA Project'}
-        # then we need to convert it to a ToolMessage
-        if "query" in response:
-            tool_call = convert_json_to_tool_call(response)
-            response = AIMessage(content="", additional_kwargs=tool_call)
-        else:
-            response = AIMessage(content=response["answer"])
+        ### Code below assumes one tool call in the response ##############
+        # if "query" in response:
+        #     add_kw_tc, tool_call = convert_json_to_tool_call(response, self.tools[0])
+        #     # print("Tool call:\n", tool_call)
+        #     response = AIMessage(content="", additional_kwargs=add_kw_tc, tool_calls=[tool_call])
+        #     # print(response)
+        # else:
+        #     response = AIMessage(content=response["answer"])
         # We return a list, because this will get added to the existing list
-        return {"messages": [response], "output": response}
+        # return {"messages": [response], "output": response}
+        ######################################################################
+        
+        ai_message = []
+        tool_calls = []
+        for res in response:
+            if "query" in res:
+                add_kw_tc, tool_call = convert_json_to_tool_call(res, self.tools[0])
+                # print("Tool call:\n", tool_call)
+                tool_calls.append(tool_call)
+
+        if tool_calls:
+            ai_message=AIMessage(content="", additional_kwargs=add_kw_tc, tool_calls=tool_calls)
+        else:
+            ai_message=AIMessage(content=res["answer"])
+        
+        return {"messages": [ai_message], "output": ai_message.content}
 
 
