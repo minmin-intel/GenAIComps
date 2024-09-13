@@ -10,6 +10,7 @@ from time import sleep
 import pandas as pd
 import requests
 from src.utils import format_date, get_args
+from langchain_core.messages import BaseMessage, HumanMessage, ToolMessage, AIMessage
 
 
 def test_agent_local(args):
@@ -161,12 +162,12 @@ def non_streaming_run(agent, query, config):
     initial_state = agent.prepare_initial_state(query)
 
     for s in agent.app.stream(initial_state, config=config, stream_mode="values"):
-        # message = s["messages"][-1]
-        # if isinstance(message, tuple):
-        #     print(message)
-        # else:
-        #     message.pretty_print()
-        print(s["messages"])
+        message = s["messages"][-1]
+        if isinstance(message, ToolMessage):
+            pass
+        else:
+            message.pretty_print()
+        # print(s["messages"])
 
     last_message = s["messages"][-1]
     print("******Response: ", last_message.content)
@@ -208,13 +209,25 @@ def test_query_writer_llama(args):
 
 def test_local_ragagent_llama(args):
     from src.agent import instantiate_agent
+    agent = instantiate_agent(args, strategy=args.strategy)
+    config = {"recursion_limit": args.recursion_limit}
 
     # query = "What is the Intel OPEA Project?"
     # query = "who has had more number one hits on the us billboard hot 100 chart, michael jackson or elvis presley?"
-    query = "what's the most recent album from the founder of ysl records?"
-    agent = instantiate_agent(args, strategy=args.strategy)
-    config = {"recursion_limit": args.recursion_limit}
-    response = non_streaming_run(agent, query, config)
+    # query = "what's the most recent album from the founder of ysl records?"
+    # query = "what is the hometown of Year 2023 Australia open winner?"
+    # query = "Hello, how are you?"
+    # response = non_streaming_run(agent, query, config)
+
+    df = pd.read_csv(os.path.join(args.filedir, args.filename))
+    answers = []
+    for _, row in df.iterrows():
+        query = row["query"]
+        print("Query: ", query)    
+        response = non_streaming_run(agent, query, config)
+        answers.append(response)        
+    df["answer"] = answers
+    df.to_csv(args.output, index=False)
 
     
 

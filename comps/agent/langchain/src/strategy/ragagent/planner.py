@@ -136,6 +136,7 @@ class TextGenerator:
         self.rag_chain = prompt | llm_endpoint | StrOutputParser()
 
     def __call__(self, state):
+        from .utils import aggregate_docs
         print("---GENERATE---")
         messages = state["messages"]
         question = messages[0].content
@@ -143,13 +144,14 @@ class TextGenerator:
 
         # find the latest retrieved doc
         # which is a ToolMessage
-        for m in state["messages"][::-1]:
-            if isinstance(m, ToolMessage):
-                last_message = m
-                break
+        # for m in state["messages"][::-1]:
+        #     if isinstance(m, ToolMessage):
+        #         last_message = m
+        #         break
 
         question = messages[0].content
-        docs = last_message.content
+        # docs = last_message.content
+        docs = aggregate_docs(messages)
 
         # Run
         response = self.rag_chain.invoke({"context": docs, "question": question, "time": query_time})
@@ -163,11 +165,13 @@ class RAGAgent(BaseAgent):
         super().__init__(args)
 
         # Define Nodes
-        document_grader = DocumentGrader(self.llm_endpoint, args.model)
+        
         if args.strategy =="rag_agent":
             query_writer = QueryWriter(self.llm_endpoint, args.model, self.tools_descriptions)
+            document_grader = DocumentGrader(self.llm_endpoint, args.model)
         elif args.strategy == "rag_agent_llama":
             query_writer = QueryWriterLlama(self.llm_endpoint, args.model, self.tools_descriptions)
+            document_grader = DocumentGraderLlama(self.llm_endpoint, args.model)
         text_generator = TextGenerator(self.llm_endpoint)
         retriever = Retriever.create(self.tools_descriptions)
 
@@ -321,8 +325,59 @@ class QueryWriterLlama:
         if tool_calls:
             ai_message=AIMessage(content="", additional_kwargs=add_kw_tc, tool_calls=tool_calls)
         else:
-            ai_message=AIMessage(content=res["answer"])
+            ai_message=AIMessage(content=response[0]["answer"])
         
         return {"messages": [ai_message], "output": ai_message.content}
 
 
+class DocumentGraderLlama:
+    """Determines whether the retrieved documents are relevant to the question.
+
+    Args:
+        state (messages): The current state
+
+    Returns:
+        str: A decision for whether the documents are relevant or not
+    """
+
+    def __init__(self, llm_endpoint, model_id=None):
+        from .prompt import DOC_GRADER_Llama_PROMPT
+        class grade(BaseModel):
+            """Binary score for relevance check."""
+
+            binary_score: str = Field(description="Relevance score 'yes' or 'no'")
+
+        # Prompt
+        prompt = PromptTemplate(
+            template=DOC_GRADER_Llama_PROMPT,
+            input_variables=["context", "question"],
+        )
+
+        if isinstance(llm_endpoint, HuggingFaceEndpoint):
+            llm = ChatHuggingFace(llm=llm_endpoint, model_id=model_id).bind_tools([grade])
+        elif isinstance(llm_endpoint, ChatOpenAI):
+            llm = llm_endpoint.bind_tools([grade])
+        output_parser = PydanticToolsParser(tools=[grade], first_tool_only=True)
+        self.chain = prompt | llm | output_parser
+
+    def __call__(self, state) -> Literal["generate", "rewrite"]:
+        from .utils import aggregate_docs
+        print("---CALL DocumentGrader---")
+        messages = state["messages"]
+        
+        question = messages[0].content  # the original query
+        docs = aggregate_docs(messages)
+        print("@@@@ Docs: ", docs)
+
+        scored_result = self.chain.invoke({"question": question, "context": docs})
+
+        score = scored_result.binary_score
+
+        if score.startswith("yes"):
+            print("---DECISION: DOCS RELEVANT---")
+            return {"doc_score": "generate"}
+
+        else:
+            print(f"---DECISION: DOCS NOT RELEVANT---")
+
+            return {"messages": [HumanMessage(content=instruction)], "doc_score": "rewrite"}

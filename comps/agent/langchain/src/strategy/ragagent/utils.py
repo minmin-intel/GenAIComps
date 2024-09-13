@@ -46,4 +46,17 @@ def assemble_history(messages):
                     n+=1
     return query_history
             
-                
+def aggregate_docs(messages):
+    """
+    messages: AI (query writer), TOOL (retriever), HUMAN (Doc Grader
+    """
+    docs =[]
+    context = ""
+    for m in messages[::-1]:
+        if isinstance(m, ToolMessage):
+            docs.append(m.content)
+        elif isinstance(m, AIMessage):
+            break
+    for doc in docs[::-1]:
+        context = context + doc + "\n"
+    return context

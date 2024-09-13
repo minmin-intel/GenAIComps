@@ -86,7 +86,7 @@ You Output:\n
 """
 
 DOC_GRADER_Llama_PROMPT = """\
-Given the QUERY, determine the DOCUMENT contains relevant information to answer the query.\n
+Given the QUERY, determine the DOCUMENT contains all the information to answer the query.\n
 QUERY: {question} \n
 DOCUMENT:\n{context}\n\n
-Give score 'yes' if the document provides relevant information to answer the question. Otherwise, give score 'no'. ONLY answer with 'yes' or 'no'. NOTHING ELSE."""
+Give score 'yes' if the document provides all the information needed to answer the question. Otherwise, give score 'no'. ONLY answer with 'yes' or 'no'. NOTHING ELSE."""
