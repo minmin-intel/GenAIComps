@@ -1,6 +1,6 @@
 MODEL="meta-llama/Meta-Llama-3.1-70B-Instruct"
 LLMENDPOINT=http://${host_ip}:8085
-STRATEGY=rag_agent_llama
+STRATEGY=react_llama #rag_agent_llama
 
 FILEDIR=$WORKDIR/datasets/crag_qas/
 FILENAME=crag_20_answerable_queries.csv
@@ -17,7 +17,5 @@ python3 test.py \
 --filedir ${FILEDIR} \
 --filename ${FILENAME} \
 --output ${OUTPUT} \
---test_rag
-
-# --test_llama \
-# --stream false
+--test_llama \
+--stream false

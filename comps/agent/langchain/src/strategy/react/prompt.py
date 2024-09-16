@@ -16,3 +16,29 @@ Please follow these guidelines when formulating your answer:
 2. If you are uncertain or do not know the answer, respond with “I don’t know”.
 3. Give concise, factual and relevant answers.
 """
+
+
+REACT_AGENT_LLAMA_PROMPT ="""\
+Given the user request, think through the problem step by step and solve the problem step by step.\
+Use reasoning and the tools provided to solve the problem.\
+When you cannot get the answer at first, do not give up. Reflect on the steps you have taken so far and try to solve the problem in a different way.
+
+You have access to the following tools:
+{tools}
+
+The execution history:
+{history}
+
+If you can generate an answer, provide the answer in the following format in a new line:
+{{"answer": "your answer here"}}
+
+If you need to call tools, use the following format:
+{{"tool":"tool 1", "args":{{"input 1": "input 1 value", "input 2": "input 2 value"}}}}
+{{"tool":"tool 2", "args":{{"input 3": "input 3 value", "input 4": "input 4 value"}}}}
+Multiple tools can be called in a single step, but always separate each tool call with a newline.
+
+You must always either provide an answer or make tool calls in your output.
+
+User request: {input}
+Now begin!
+"""

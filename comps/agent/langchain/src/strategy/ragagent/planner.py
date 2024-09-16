@@ -314,7 +314,6 @@ class QueryWriterLlama:
         # return {"messages": [response], "output": response}
         ######################################################################
         
-        ai_message = []
         tool_calls = []
         for res in response:
             if "query" in res:

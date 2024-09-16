@@ -247,7 +247,7 @@ def test_local_ragagent_llama(args):
     # response = non_streaming_run(agent, query, config)
 
     df = pd.read_csv(os.path.join(args.filedir, args.filename))
-    # df = df.head(2)
+    df = df.head(1)
     answers = []
     traces = []
     num_llm_calls = []
@@ -265,7 +265,9 @@ def test_local_ragagent_llama(args):
     df["answer"] = answers
     df["trace"] = traces
     df["num_llm_calls"] = num_llm_calls
-    df.to_csv(args.output, index=False)
+    # df.to_csv(args.output, index=False)
+
+
 
 PROMPT = """\
 ### You are a helpful, respectful and honest assistant.

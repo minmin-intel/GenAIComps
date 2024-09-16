@@ -132,3 +132,138 @@ class ReActAgentwithLanggraph(BaseAgent):
             return last_message.content
         except Exception as e:
             return str(e)
+
+###############################################################################
+from langgraph.managed import IsLastStep
+from langgraph.graph.message import add_messages
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    SystemMessage,
+)
+from langgraph.prebuilt import ToolNode
+from langgraph.graph import END, StateGraph
+from langchain_core.prompts import PromptTemplate
+from typing import (
+    Annotated,
+    Callable,
+    Optional,
+    Sequence,
+    Type,
+    TypedDict,
+    TypeVar,
+    Union,
+)
+
+class AgentState(TypedDict):
+    """The state of the agent."""
+
+    messages: Annotated[Sequence[BaseMessage], add_messages]
+    is_last_step: IsLastStep
+
+
+class ReActAgentNodeLlama:
+    """
+    Do planning and reasoning and generate tool calls.
+    A workaround for open-source llm served by TGI-gaudi.
+    """
+    def __init__(self, llm_endpoint, model_id, tools):
+        from .prompt import REACT_AGENT_LLAMA_PROMPT
+        from .utils import ReActLlamaOutputParser
+
+        output_parser = ReActLlamaOutputParser()
+        prompt = PromptTemplate(
+            template=REACT_AGENT_LLAMA_PROMPT,
+            input_variables=["input", "history", "tools"],
+        )
+        llm = ChatHuggingFace(llm=llm_endpoint, model_id=model_id)
+        self.tools = tools
+        self.chain = prompt | llm | output_parser
+
+    def __call__(self, state):
+        from .utils import convert_json_to_tool_call, assemble_history
+        print("---CALL Agent node---")
+        messages = state["messages"]
+
+        # assemble a prompt from messages
+        query = messages[0].content
+        history=assemble_history(messages)
+        print("@@@ History: ", history)
+        tools_descriptions = tool_renderer(self.tools)
+        print("@@@ Tools description: ", tools_descriptions)
+
+        # invoke chain
+        output = self.chain.invoke({"input": query, "history": history, "tools": tools_descriptions})
+        print("@@@ Output from chain: ", output)
+
+        # convert output to tool calls
+        tool_calls = []
+        for res in output:
+            if "tool" in res:
+                add_kw_tc, tool_call = convert_json_to_tool_call(res)
+                # print("Tool call:\n", tool_call)
+                tool_calls.append(tool_call)
+
+        if tool_calls:
+            ai_message=AIMessage(content="", additional_kwargs=add_kw_tc, tool_calls=tool_calls)
+        else:
+            ai_message=AIMessage(content=output[0]["answer"])
+
+        return {"messages": [ai_message]}
+
+
+class ReActAgentLlama(BaseAgent):
+    def __init__(self, args, with_memory=False):
+        super().__init__(args)
+        agent = ReActAgentNodeLlama(llm_endpoint=self.llm_endpoint, model_id=args.model, tools=self.tools_descriptions)
+        tool_node = ToolNode(self.tools_descriptions)
+
+        workflow = StateGraph(AgentState)
+
+        # Define the nodes we will cycle between
+        workflow.add_node("agent", agent)
+        workflow.add_node("tools", tool_node)
+
+        workflow.set_entry_point("agent")
+
+        # We now add a conditional edge
+        workflow.add_conditional_edges(
+            # First, we define the start node. We use `agent`.
+            # This means these are the edges taken after the `agent` node is called.
+            "agent",
+            # Next, we pass in the function that will determine which node is called next.
+            self.should_continue,
+            # Finally we pass in a mapping.
+            # The keys are strings, and the values are other nodes.
+            # END is a special node marking that the graph should finish.
+            # What will happen is we will call `should_continue`, and then the output of that
+            # will be matched against the keys in this mapping.
+            # Based on which one it matches, that node will then be called.
+            {
+                # If `tools`, then we call the tool node.
+                "continue": "tools",
+                # Otherwise we finish.
+                "end": END,
+            },
+        )
+
+        # We now add a normal edge from `tools` to `agent`.
+        # This means that after `tools` is called, `agent` node is called next.
+        workflow.add_edge("tools", "agent")
+
+        self.app = workflow.compile()
+
+
+    # Define the function that determines whether to continue or not
+    def should_continue(self, state: AgentState):
+        messages = state["messages"]
+        last_message = messages[-1]
+        # If there is no function call, then we finish
+        if not last_message.tool_calls:
+            return "end"
+        # Otherwise if there is, we continue
+        else:
+            return "continue"
+
+    def prepare_initial_state(self, query):
+        return {"messages": [HumanMessage(content=query)]}

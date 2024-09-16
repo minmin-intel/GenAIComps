@@ -11,6 +11,10 @@ def instantiate_agent(args, strategy="react_langchain", with_memory=False):
         from .strategy.react import ReActAgentwithLanggraph
 
         return ReActAgentwithLanggraph(args, with_memory)
+    elif strategy == "react_llama":
+        from .strategy.react import ReActAgentLlama
+
+        return ReActAgentLlama(args, with_memory)
     elif strategy == "plan_execute":
         from .strategy.planexec import PlanExecuteAgentWithLangGraph
 
