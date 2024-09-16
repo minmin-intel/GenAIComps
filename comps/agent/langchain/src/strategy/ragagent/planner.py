@@ -341,7 +341,7 @@ class DocumentGraderLlama:
     """
 
     def __init__(self, llm_endpoint, model_id=None):
-        from .prompt import DOC_GRADER_Llama_PROMPT
+        from .prompt import DOC_GRADER_Llama_PROMPT, DOC_GRADER_Llama_PROMPT_v2
         class grade(BaseModel):
             """Binary score for relevance check."""
 
@@ -349,7 +349,7 @@ class DocumentGraderLlama:
 
         # Prompt
         prompt = PromptTemplate(
-            template=DOC_GRADER_Llama_PROMPT,
+            template=DOC_GRADER_Llama_PROMPT, #DOC_GRADER_PROMPT, 
             input_variables=["context", "question"],
         )
 

@@ -171,7 +171,34 @@ def non_streaming_run(agent, query, config):
 
     last_message = s["messages"][-1]
     print("******Response: ", last_message.content)
-    return last_message.content
+    trace = get_trace(s["messages"])
+    num_llm_calls = count_llm_calls(s["messages"])
+    return last_message.content, trace, num_llm_calls
+
+def count_llm_calls(messages):
+    count = 0
+    for m in messages[1:]:
+        if isinstance(m, ToolMessage):
+            pass
+        else:
+            count += 1
+    return count+1
+
+
+def get_trace(messages):
+    trace = []
+    for m in messages:
+        if isinstance(m, AIMessage):
+            try:
+                tool_calls = m.additional_kwargs["tool_calls"]
+                trace.append(tool_calls)
+            except:
+                trace.append(m.content)
+        if isinstance(m, ToolMessage):
+            trace.append(m.content)
+    return trace
+
+
 
 def test_query_writer_llama(args):
     from src.strategy.ragagent.planner import QueryWriterLlama
@@ -220,16 +247,74 @@ def test_local_ragagent_llama(args):
     # response = non_streaming_run(agent, query, config)
 
     df = pd.read_csv(os.path.join(args.filedir, args.filename))
+    # df = df.head(2)
     answers = []
+    traces = []
+    num_llm_calls = []
     for _, row in df.iterrows():
-        query = row["query"]
-        print("Query: ", query)    
-        response = non_streaming_run(agent, query, config)
-        answers.append(response)        
+        q = row["query"]
+        t = row["query_time"]
+        query = "Question: {} \nThe question was asked at: {}".format(q, t)
+        print("Query: ", query)  
+        response, trace, n = non_streaming_run(agent, query, config)
+        answers.append(response)  
+        traces.append(trace)  
+        num_llm_calls.append(n)
+    if "answer" in df.columns:
+        df.rename(columns={"answer": "ref_answer"}, inplace=True)    
     df["answer"] = answers
+    df["trace"] = traces
+    df["num_llm_calls"] = num_llm_calls
     df.to_csv(args.output, index=False)
 
-    
+PROMPT = """\
+### You are a helpful, respectful and honest assistant.
+You are given a Question and the time when it was asked in the Pacific Time Zone (PT), referred to as "Query
+Time". The query time is formatted as "mm/dd/yyyy, hh:mm:ss PT".
+Please follow these guidelines when formulating your answer:
+1. If the question contains a false premise or assumption, answer “invalid question”.
+2. If you are uncertain or do not know the answer, respond with “I don’t know”.
+3. Refer to the search results to form your answer.
+5. Give concise, factual and relevant answers.
+
+### Search results: {context} \n
+### Question: {question} \n
+### Query Time: {time} \n
+### Answer:
+"""
+
+def generate_answer(args, query, context, time):
+    from langchain_huggingface import ChatHuggingFace
+    from src.utils import setup_hf_tgi_client
+    prompt = PROMPT.format(context=context, question=query, time=time)
+    llm = setup_hf_tgi_client(args)
+    chat_llm = ChatHuggingFace(llm=llm, model_id=args.model)
+    response = chat_llm.invoke(prompt)
+    return response.content
+
+
+def test_local_rag(args):
+    from tools.worker_agent_tools import search_knowledge_base
+    df = pd.read_csv(os.path.join(args.filedir, args.filename))
+    # df = df.head(2)
+    answers = []
+    contexts = []
+    for _, row in df.iterrows():
+        q = row["query"]
+        t = row["query_time"]
+        print("========== Query: ", q)
+        context = search_knowledge_base(q)
+        print("========== Context: ", context)
+        answer = generate_answer(args, q, context, t)  
+        print("========== Answer: ", answer)
+        answers.append(answer)
+        contexts.append(context)
+
+    if "answer" in df.columns:
+        df.rename(columns={"answer": "ref_answer"}, inplace=True)    
+    df["answer"] = answers
+    df["context"] = contexts
+    df.to_csv(args.output, index=False)
 
 
 
@@ -241,6 +326,7 @@ if __name__ == "__main__":
     parser.add_argument("--endpoint_test", action="store_true", help="Test with endpoint mode")
     parser.add_argument("--assistants_api_test", action="store_true", help="Test with endpoint mode")
     parser.add_argument("--test_llama", action="store_true", help="test llama3.1 based ragagent")
+    parser.add_argument("--test_rag", action="store_true", help="test conventional rag")
     parser.add_argument("--q", type=int, default=0)
     parser.add_argument("--ip_addr", type=str, default="127.0.0.1", help="endpoint ip address")
     parser.add_argument("--query", type=str, default=None)
@@ -264,5 +350,7 @@ if __name__ == "__main__":
         test_assistants_http(args)
     elif args.test_llama:
         test_local_ragagent_llama(args)
+    elif args.test_rag:
+        test_local_rag(args)
     else:
         print("Please specify the test type")
