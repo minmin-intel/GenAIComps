@@ -3,7 +3,6 @@
 
 import os
 import requests
-from tools.pycragapi import CRAG
 
 
 def search_knowledge_base(query: str) -> str:
@@ -41,8 +40,4 @@ def search_knowledge_base(query: str) -> str:
     else:
         return "Error parsing response from the knowledge base."
 
-def get_billboard_rank_date(rank: int, date: str = None) -> dict:
-    """Get Billboard ranking for a specific rank and date."""
-    api = CRAG()
-    rank = int(rank)
-    return api.music_get_billboard_rank_date(rank, date)
+

@@ -20,7 +20,7 @@ Please follow these guidelines when formulating your answer:
 
 REACT_AGENT_LLAMA_PROMPT ="""\
 Given the user request, think through the problem step by step and solve the problem step by step.
-Observe the outputs from the tools in the execution history, and use your reasoning to decide if you can come up with an answer or you need to make more tool calls.
+Observe the outputs from the tools in the execution history, and use your reasoning to decide if you can come up with an answer or you need to make tool calls.
 When you cannot get the answer at first, do not give up. Reflect on the steps you have taken so far and try to solve the problem in a different way.
 
 You have access to the following tools:
@@ -37,6 +37,9 @@ Multiple tools can be called in a single step, but always separate each tool cal
 
 If you can generate an answer, provide the answer in the following format in a new line:
 {{"answer": "your answer here"}}
+
+If you want to clarify with the user, ask a question in the following format in a new line:
+{{"question": "your question here"}}
 
 You must always either provide an answer or make tool calls in your output.
 

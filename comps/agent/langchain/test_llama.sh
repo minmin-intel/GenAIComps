@@ -10,7 +10,7 @@ OUTPUT=$WORKDIR/datasets/crag_results/test_llama3.1-70B-instruct_20queries.csv
 export RETRIEVAL_TOOL_URL="http://${host_ip}:8889/v1/retrievaltool"
 export CRAG_SERVER=http://${host_ip}:8080
 
-python3 test.py \
+python3 benchmark.py \
 --model ${MODEL} \
 --llm_endpoint_url ${LLMENDPOINT} \
 --strategy ${STRATEGY} \

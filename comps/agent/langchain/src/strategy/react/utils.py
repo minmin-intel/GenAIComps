@@ -44,7 +44,9 @@ def assemble_history(messages):
                     tool = tool_call["name"]
                     tc_args = tool_call["args"]
                     query_history += f"Tool Call: {tool} - {tc_args}\n"
-                    # n+=1
+            else:
+                # did not make tool calls
+                query_history += f"Assistant Output {n}: {m.content}\n"
         elif isinstance(m, ToolMessage):
             query_history += f"Tool Output: {m.content}\n"
     return query_history
