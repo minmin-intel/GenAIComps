@@ -4,10 +4,11 @@ STRATEGY=react_llama #rag_agent_llama
 
 FILEDIR=$WORKDIR/datasets/crag_qas/
 FILENAME=crag_20_answerable_queries.csv
-OUTPUT=$WORKDIR/datasets/crag_results/v1_results_llama3.1-70B-instruct_20queries.csv
+OUTPUT=$WORKDIR/datasets/crag_results/test_llama3.1-70B-instruct_20queries.csv
 
 
 export RETRIEVAL_TOOL_URL="http://${host_ip}:8889/v1/retrievaltool"
+export CRAG_SERVER=http://${host_ip}:8080
 
 python3 test.py \
 --model ${MODEL} \

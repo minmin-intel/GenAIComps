@@ -12,3 +12,16 @@ search_knowledge_base:
       type: str
       description: query
   return_output: retrieved_data
+
+
+get_billboard_rank_date:
+  description: Get Billboard ranking for a specific rank and date.
+  callable_api: worker_agent_tools.py:get_billboard_rank_date
+  args_schema:
+    rank:
+      type: int
+      description: song name
+    date:
+      type: str
+      description: date
+  return_output: billboard_info

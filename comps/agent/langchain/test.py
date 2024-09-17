@@ -246,8 +246,16 @@ def test_local_ragagent_llama(args):
     # query = "Hello, how are you?"
     # response = non_streaming_run(agent, query, config)
 
-    df = pd.read_csv(os.path.join(args.filedir, args.filename))
-    df = df.head(1)
+    query=[
+        "what song topped the billboard chart on 2004-02-04?",
+    ]
+    query_time = [
+        "03/01/2024, 00:00:00 PT",
+    ]
+
+    df = pd.DataFrame({"query": query, "query_time": query_time})
+    # df = pd.read_csv(os.path.join(args.filedir, args.filename))
+    # df = df.head(1)
     answers = []
     traces = []
     num_llm_calls = []
