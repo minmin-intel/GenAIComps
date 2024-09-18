@@ -236,6 +236,24 @@ class ReActAgentNodeLlama:
             else:
                 ai_message=AIMessage(content=output)
 
+        # answer = None
+        # tool_calls = []
+        # for res in output:
+        #     if "answer" in res:
+        #         answer = res["answer"]
+        #         break
+        #     elif "tool" in res:
+        #         add_kw_tc, tool_call = convert_json_to_tool_call(res)
+        #         # print("Tool call:\n", tool_call)
+        #         tool_calls.append(tool_call)
+
+        # if answer:
+        #     ai_message=AIMessage(content=answer)  
+        # elif tool_calls:
+        #     ai_message=AIMessage(content="", additional_kwargs=add_kw_tc, tool_calls=tool_calls)
+        # else:
+        #     ai_message=AIMessage(content=output)
+
         return {"messages": [ai_message]}
 
 

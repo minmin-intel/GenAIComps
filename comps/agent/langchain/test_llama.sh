@@ -1,10 +1,12 @@
 MODEL="meta-llama/Meta-Llama-3.1-70B-Instruct"
 LLMENDPOINT=http://${host_ip}:8085
 STRATEGY=react_llama #rag_agent_llama
+TEMPERATURE=0.01
+TOPK=10
 
 FILEDIR=$WORKDIR/datasets/crag_qas/
-FILENAME=crag_20_answerable_queries.csv
-OUTPUT=$WORKDIR/datasets/crag_results/v1-react-hier-select-tool_llama3.1-70B-instruct_20queries.csv
+FILENAME=crag_qa_music_sampled_with_query_time.jsonl #crag_20_answerable_queries.csv
+OUTPUT=$WORKDIR/datasets/crag_results/ragagent_llama3.1-70B-instruct_92queries.csv
 TOOLS=tools/supervisor_agent_tools.yaml
 
 
@@ -19,6 +21,9 @@ AGENT_ENDPOINT=$WORKER_AGENT_URL
 python3 benchmark.py \
 --model ${MODEL} \
 --llm_endpoint_url ${LLMENDPOINT} \
+--temperature ${TEMPERATURE} \
+--top_k ${TOPK} \
+--max_new_tokens 4096 \
 --strategy ${STRATEGY} \
 --recursion_limit 15 \
 --filedir ${FILEDIR} \
@@ -26,6 +31,6 @@ python3 benchmark.py \
 --output ${OUTPUT} \
 --tools $TOOLS \
 --agent_endpoint_url ${AGENT_ENDPOINT} \
---test_llama \
+--test_api \
 --select_tool true \
 --stream false
