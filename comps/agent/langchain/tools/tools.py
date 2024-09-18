@@ -4,7 +4,7 @@ from tools.pycragapi import CRAG
 
 def search_knowledge_base(query: str) -> str:
     """Search the knowledge base for a specific query."""
-    # use worker agent (DocGrader) to search the knowledge base
+    # use worker agent to search the knowledge base
     url = os.environ.get("WORKER_AGENT_URL")
     print(url)
     proxies = {"http": ""}

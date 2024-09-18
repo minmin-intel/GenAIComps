@@ -134,6 +134,8 @@ def get_args():
     parser.add_argument("--temperature", type=float, default=0.01)
     parser.add_argument("--repetition_penalty", type=float, default=1.03)
     parser.add_argument("--return_full_text", type=bool, default=False)
+    parser.add_argument("--tool_topk", type=int, default=5)
+    parser.add_argument("--select_tool", type=bool, default=False)
 
     sys_args, unknown_args = parser.parse_known_args()
     # print("env_config: ", env_config)

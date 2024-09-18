@@ -15,20 +15,29 @@ from langchain_core.messages import BaseMessage, HumanMessage, ToolMessage, AIMe
 
 def non_streaming_run(agent, query, config):
     initial_state = agent.prepare_initial_state(query)
-
-    for s in agent.app.stream(initial_state, config=config, stream_mode="values"):
-        message = s["messages"][-1]
-        if isinstance(message, ToolMessage):
-            pass
-        else:
-            message.pretty_print()
-        # print(s["messages"])
-
-    last_message = s["messages"][-1]
-    print("******Response: ", last_message.content)
-    trace = get_trace(s["messages"])
-    num_llm_calls = count_llm_calls(s["messages"])
-    return last_message.content, trace, num_llm_calls
+    try:
+        for s in agent.app.stream(initial_state, config=config, stream_mode="values"):
+            message = s["messages"][-1]
+            if isinstance(message, ToolMessage):
+                pass
+            else:
+                message.pretty_print()
+            # print(s["messages"])
+        last_message = s["messages"][-1]
+        response = last_message.content
+    except Exception as e:
+        print("Exception happened: ", str(e))
+        response = str(e)
+  
+    try:
+        trace = get_trace(s["messages"])
+        num_llm_calls = count_llm_calls(s["messages"])
+    except Exception as e:
+        print("Exception happened when getting trace")
+        trace = []
+        num_llm_calls = None
+        
+    return response, trace, num_llm_calls
 
 def count_llm_calls(messages):
     count = 0
@@ -59,18 +68,19 @@ def test_local_ragagent_llama(args):
     agent = instantiate_agent(args, strategy=args.strategy)
     config = {"recursion_limit": args.recursion_limit}
 
-    query=[
-        # "what song topped the billboard chart on 2004-02-04?",
-        # "Hello, how are you?",
-        "tell me the most recent song or album by doris duke?",
-    ]
-    query_time = [
-        "03/01/2024, 00:00:00 PT",
-    ]
+    # query=[
+    #     "what song topped the billboard chart on 2004-02-04?",
+    #     # "Hello, how are you?",
+    #     # "tell me the most recent song or album by doris duke?",
+    # ]
+    # query_time = [
+    #     "03/01/2024, 00:00:00 PT",
+    # ]
 
-    df = pd.DataFrame({"query": query, "query_time": query_time})
-    # df = pd.read_csv(os.path.join(args.filedir, args.filename))
-    # df = df.head(1)
+    # df = pd.DataFrame({"query": query, "query_time": query_time})
+
+    df = pd.read_csv(os.path.join(args.filedir, args.filename))
+
     answers = []
     traces = []
     num_llm_calls = []
@@ -88,43 +98,37 @@ def test_local_ragagent_llama(args):
     df["answer"] = answers
     df["trace"] = traces
     df["num_llm_calls"] = num_llm_calls
-    # df.to_csv(args.output, index=False)
+    df.to_csv(args.output, index=False)
 
-def test_multiagent(args):
-    from src.agent import instantiate_agent
+#######################################################
+############# test Agent API ######################
+#######################################################
 
-    # worker_agent = instantiate_agent(args, strategy=args.strategy)
-    # supervisor_agent = instantiate_agent(args, strategy=args.strategy)
-    config = {"recursion_limit": args.recursion_limit}
+def generate_answer_agent_api(url, prompt):
+    proxies = {"http": ""}
+    payload = {
+        "query": prompt,
+    }
+    response = requests.post(url, json=payload, proxies=proxies)
+    answer = response.json()["text"]
+    return answer
 
-    query=[
-        # "what song topped the billboard chart on 2004-02-04?",
-        # "Hello, how are you?",
-        "tell me the most recent song or album by doris duke?",
-    ]
-    query_time = [
-        "03/01/2024, 00:00:00 PT",
-    ]
-
-    df = pd.DataFrame({"query": query, "query_time": query_time})
-    # df = pd.read_csv(os.path.join(args.filedir, args.filename))
-    # df = df.head(1)
+def test_llama_agent_api(args):
+    df = pd.read_csv(os.path.join(args.filedir, args.filename))
+    url = args.agent_endpoint_url
     answers = []
-    traces = []
-    num_llm_calls = []
     for _, row in df.iterrows():
         q = row["query"]
         t = row["query_time"]
-        query = "Question: {} \nThe question was asked at: {}".format(q, t)
-        print("Query: ", query)  
-        response, trace, n = non_streaming_run(agent, query, config)
-        answers.append(response)  
-        traces.append(trace)  
-        num_llm_calls.append(n)
-    if "answer" in df.columns:
-        df.rename(columns={"answer": "ref_answer"}, inplace=True)    
+        prompt = "Question: {}\nThe question was asked at: {}".format(q, t)
+        print("******Query:\n", prompt)
+        print("******Agent is working on the query")
+        answer = generate_answer_agent_api(url, prompt)
+        print("******Answer:\n", answer)
+        answers.append(answer)
     df["answer"] = answers
-    df["trace"] = traces
+    df.to_csv(args.output, index=False)
+    pass
 
 
 ##############################################################
@@ -188,20 +192,26 @@ if __name__ == "__main__":
     parser.add_argument("--strategy", type=str, default="react")
     parser.add_argument("--test_llama", action="store_true", help="test llama3.1 based ragagent")
     parser.add_argument("--test_rag", action="store_true", help="test conventional rag")
+    parser.add_argument("--test_api", action="store_true", help="test agent api")
     parser.add_argument("--filedir", type=str, default="./", help="test file directory")
     parser.add_argument("--filename", type=str, default="query.csv", help="query_list_file")
     parser.add_argument("--output", type=str, default="output.csv", help="query_list_file")
-    parser.add_argument("--worker_tools", type=str, default="/home/user/tools/worker_agent_tools.yaml")
-    parser.add_argument("--supervisor_tools", type=str, default="/home/user/tools/supervisor_agent_tools.yaml")
+    # parser.add_argument("--worker_tools", type=str, default="/home/user/tools/worker_agent_tools.yaml")
+    # parser.add_argument("--supervisor_tools", type=str, default="/home/user/tools/supervisor_agent_tools.yaml")
+    parser.add_argument("--agent_endpoint_url", type=str, default=None)
 
     args, _ = parser.parse_known_args()
 
     for key, value in vars(args1).items():
         setattr(args, key, value)
     
+    print(args)
+
     if args.test_llama:
         test_local_ragagent_llama(args)
     elif args.test_rag:
         test_local_rag(args)
+    elif args.test_api:
+        test_llama_agent_api(args)
     else:
         print("Please specify the test type")

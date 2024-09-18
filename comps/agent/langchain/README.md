@@ -59,6 +59,10 @@ python agent.py
 cd GenAIComps/ # back to GenAIComps/ folder
 docker build -t opea/comps-agent-langchain:latest -f comps/agent/langchain/Dockerfile .
 ```
+If you have proxy setup on your system, use the command below.
+```bash
+docker build --build-arg http_proxy=${http_proxy} --build-arg https_proxy=${https_proxy} --build-arg no_proxy=${no_proxy} -t opea/comps-agent-langchain:latest -f comps/agent/langchain/Dockerfile .
+```
 
 #### 2.2.2 Start microservices
 

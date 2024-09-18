@@ -167,9 +167,11 @@ class ReActAgentNodeLlama:
     Do planning and reasoning and generate tool calls.
     A workaround for open-source llm served by TGI-gaudi.
     """
-    def __init__(self, llm_endpoint, model_id, tools):
+    def __init__(self, llm_endpoint, model_id, tools, args):
         from .prompt import REACT_AGENT_LLAMA_PROMPT
         from .utils import ReActLlamaOutputParser
+        from .utils import describe_tools
+        from sentence_transformers import SentenceTransformer
 
         output_parser = ReActLlamaOutputParser()
         prompt = PromptTemplate(
@@ -180,8 +182,20 @@ class ReActAgentNodeLlama:
         self.tools = tools
         self.chain = prompt | llm | output_parser
 
+        # for selecting tools during runtime
+        if args.select_tool:
+            print("@@@@@ Selecting tools during runtime.")
+            self.select_tool = True
+            self.embed_model = SentenceTransformer("BAAI/bge-base-en-v1.5")
+            self.tools_descriptions = describe_tools(tools)
+            self.tools_embeddings = self.embed_model.encode(self.tools_descriptions)
+            self.tool_topk=args.tool_topk
+        else:
+            self.select_tool = False
+
     def __call__(self, state):
         from .utils import convert_json_to_tool_call, assemble_history
+        from .utils import select_tools_for_query, get_selected_tools
         print("---CALL Agent node---")
         messages = state["messages"]
 
@@ -189,7 +203,15 @@ class ReActAgentNodeLlama:
         query = messages[0].content
         history=assemble_history(messages)
         print("@@@ History: ", history)
-        tools_descriptions = tool_renderer(self.tools)
+        if not self.select_tool:
+            # get tools descriptions of all tools
+            tools_descriptions = tool_renderer(self.tools)
+        else:
+            # select tools
+            print("@@@ Selecting tools during runtime.")
+            top_k_tools = select_tools_for_query(query, self.tools_embeddings, self.embed_model, self.tool_topk, self.tools_descriptions)
+            selected_tools = get_selected_tools(top_k_tools, self.tools)
+            tools_descriptions = tool_renderer(selected_tools)
         print("@@@ Tools description: ", tools_descriptions)
 
         # invoke chain
@@ -220,7 +242,7 @@ class ReActAgentNodeLlama:
 class ReActAgentLlama(BaseAgent):
     def __init__(self, args, with_memory=False):
         super().__init__(args)
-        agent = ReActAgentNodeLlama(llm_endpoint=self.llm_endpoint, model_id=args.model, tools=self.tools_descriptions)
+        agent = ReActAgentNodeLlama(llm_endpoint=self.llm_endpoint, model_id=args.model, tools=self.tools_descriptions, args=args)
         tool_node = ToolNode(self.tools_descriptions)
 
         workflow = StateGraph(AgentState)
