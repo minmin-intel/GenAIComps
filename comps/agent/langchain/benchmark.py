@@ -83,8 +83,8 @@ def test_local_ragagent_llama(args):
     #     # "what album did maroon five release in 2010, which included the songs 'moves like jagger' and 'misery'?"
     #     # "Hello, how are you?",
     #     # "tell me the most recent song or album by doris duke?",
-    #     # "how many tracks are in drake's last album?",
-    #     "how many songs has the band the beatles released that have been recorded at abbey road studios?",
+    #     "how many tracks are in drake's last album?",
+    #     # "how many songs has the band the beatles released that have been recorded at abbey road studios?",
     #     # "who has played drums for the red hot chili peppers?",
     #     # "what's the most recent album from the founder of ysl records?",
     #     # "when did miley cyrus win grammy best new artist award?",
@@ -98,7 +98,6 @@ def test_local_ragagent_llama(args):
 
     # df = pd.DataFrame({"query": query, "query_time": query_time})
 
-    # df = pd.read_csv(os.path.join(args.filedir, args.filename))
     df = get_test_dataset(args)
     print(df.shape)
 
@@ -189,8 +188,10 @@ def generate_answer(args, query, context, time):
 
 def test_local_rag(args):
     from tools.worker_agent_tools import search_knowledge_base
-    df = pd.read_csv(os.path.join(args.filedir, args.filename))
+    # df = pd.read_csv(os.path.join(args.filedir, args.filename))
     # df = df.head(2)
+    df = get_test_dataset(args)
+    print(df.shape)
     answers = []
     contexts = []
     for _, row in df.iterrows():

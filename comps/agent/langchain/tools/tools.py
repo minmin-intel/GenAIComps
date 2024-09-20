@@ -2,6 +2,7 @@ import os
 import requests
 from tools.pycragapi import CRAG
 
+# using worker agent    
 def search_knowledge_base(query: str) -> str:
     """Search the knowledge base for a specific query."""
     # use worker agent to search the knowledge base

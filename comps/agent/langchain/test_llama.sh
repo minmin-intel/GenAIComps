@@ -5,8 +5,8 @@ TEMPERATURE=0.01
 TOPK=10
 
 FILEDIR=$WORKDIR/datasets/crag_qas/
-FILENAME=crag_qa_music_sampled_with_query_time.jsonl #crag_20_answerable_queries.csv
-OUTPUT=$WORKDIR/datasets/crag_results/ragagent_llama3.1-70B-instruct_92queries.csv
+FILENAME=crag_qa_music_sampled_with_query_time.jsonl #crag_20_answerable_queries.csv #
+OUTPUT=$WORKDIR/datasets/crag_results/v4_react-select_llama3.1-70B-instruct_92queries.csv
 TOOLS=tools/supervisor_agent_tools.yaml
 
 
@@ -25,12 +25,12 @@ python3 benchmark.py \
 --top_k ${TOPK} \
 --max_new_tokens 4096 \
 --strategy ${STRATEGY} \
---recursion_limit 15 \
+--recursion_limit 16 \
 --filedir ${FILEDIR} \
 --filename ${FILENAME} \
 --output ${OUTPUT} \
 --tools $TOOLS \
 --agent_endpoint_url ${AGENT_ENDPOINT} \
---test_api \
+--test_llama \
 --select_tool true \
 --stream false
