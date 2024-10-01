@@ -17,6 +17,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from pydantic import BaseModel, Field
 
 from ..base_agent import BaseAgent
+from ...utils import wrap_chat
 from .prompt import DOC_GRADER_PROMPT, RAG_PROMPT, QueryWriterLlamaPrompt
 
 instruction = "Retrieved document is not sufficient or relevant to answer the query. Reformulate the query to search knowledge base again."
@@ -280,7 +281,8 @@ class QueryWriterLlama:
             template=QueryWriterLlamaPrompt,
             input_variables=["question", "history", "feedback"],
         )
-        llm = ChatHuggingFace(llm=llm_endpoint, model_id=model_id)
+        # llm = ChatHuggingFace(llm=llm_endpoint, model_id=model_id)
+        llm = wrap_chat(llm_endpoint, model_id)
         self.tools = tools
         self.chain = prompt | llm | output_parser
 
@@ -311,6 +313,8 @@ class QueryWriterLlama:
 
         ############ allow multiple tool calls in one AI message ############
         tool_calls = []
+        if isinstance(response, str):
+            response = [response]
         for res in response:
             if "query" in res:
                 add_kw_tc, tool_call = convert_json_to_tool_call(res, self.tools[0])
@@ -344,10 +348,11 @@ class DocumentGraderLlama:
             input_variables=["context", "question"],
         )
 
-        if isinstance(llm_endpoint, HuggingFaceEndpoint):
-            llm = ChatHuggingFace(llm=llm_endpoint, model_id=model_id)
-        elif isinstance(llm_endpoint, ChatOpenAI):
-            llm = llm_endpoint
+        # if isinstance(llm_endpoint, HuggingFaceEndpoint):
+        #     llm = ChatHuggingFace(llm=llm_endpoint, model_id=model_id)
+        # elif isinstance(llm_endpoint, ChatOpenAI):
+        #     llm = llm_endpoint
+        llm = wrap_chat(llm_endpoint, model_id)
         self.chain = prompt | llm
 
     def __call__(self, state) -> Literal["generate", "rewrite"]:

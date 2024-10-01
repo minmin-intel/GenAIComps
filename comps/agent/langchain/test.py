@@ -156,6 +156,12 @@ def test_ut(args):
         print(tool)
 
 
+def test_vllm(args):
+    from src.utils import setup_vllm_client
+    llm = setup_vllm_client(args)
+    print(llm.invoke("What is deep learning?"))
+
+
 if __name__ == "__main__":
     args1, _ = get_args()
     parser = argparse.ArgumentParser()
@@ -181,7 +187,7 @@ if __name__ == "__main__":
     elif args.endpoint_test:
         test_agent_http(args)
     elif args.ut:
-        test_ut(args)
+        test_vllm(args)
     elif args.assistants_api_test:
         test_assistants_http(args)
     else:

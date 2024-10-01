@@ -24,7 +24,7 @@ class QueryWriterLlamaOutputParser(BaseOutputParser):
         if output:
             return output
         else:
-            return None
+            return text
 
 
 def convert_json_to_tool_call(json_str, tool):

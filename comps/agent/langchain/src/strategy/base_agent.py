@@ -12,10 +12,23 @@ class BaseAgent:
         self.llm_endpoint = setup_llm(args)
         self.tools_descriptions = get_tools_descriptions(args.tools)
         self.app = None
+        self.args = args
         self.memory = None
         self.id = f"assistant_{self.__class__.__name__}_{uuid4()}"
         print(self.tools_descriptions)
 
+    @property
+    def is_vllm(self):
+        return self.args.llm_engine == "vllm"
+
+    @property
+    def is_tgi(self):
+        return self.args.llm_engine == "tgi"
+
+    @property
+    def is_openai(self):
+        return self.args.llm_engine == "openai"
+    
     def compile(self):
         pass
 
