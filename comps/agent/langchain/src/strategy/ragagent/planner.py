@@ -346,10 +346,11 @@ class DocumentGraderLlama:
             input_variables=["context", "question"],
         )
 
-        if isinstance(llm_endpoint, HuggingFaceEndpoint):
-            llm = ChatHuggingFace(llm=llm_endpoint, model_id=model_id)
-        elif isinstance(llm_endpoint, ChatOpenAI):
-            llm = llm_endpoint
+        # if isinstance(llm_endpoint, HuggingFaceEndpoint):
+        #     llm = ChatHuggingFace(llm=llm_endpoint, model_id=model_id)
+        # elif isinstance(llm_endpoint, ChatOpenAI):
+        #     llm = llm_endpoint
+        llm = wrap_chat(llm_endpoint, model_id)
         self.chain = prompt | llm
 
     def __call__(self, state) -> Literal["generate", "rewrite"]:
@@ -364,7 +365,10 @@ class DocumentGraderLlama:
 
         scored_result = self.chain.invoke({"question": question, "context": docs})
 
-        score = scored_result.content
+        try:
+            score = scored_result.content
+        except:
+            score = scored_result
         print("@@@@ Score: ", score)
 
         # if score.startswith("yes"):
