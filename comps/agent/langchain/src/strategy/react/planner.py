@@ -12,7 +12,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import create_react_agent
 
 from ...global_var import threads_global_kv
-from ...utils import has_multi_tool_inputs, tool_renderer
+from ...utils import has_multi_tool_inputs, tool_renderer, wrap_chat
 from ..base_agent import BaseAgent
 from .prompt import REACT_SYS_MESSAGE, hwchase17_react_prompt
 
@@ -85,10 +85,7 @@ class ReActAgentwithLanggraph(BaseAgent):
     def __init__(self, args, with_memory=False):
         super().__init__(args)
 
-        if isinstance(self.llm_endpoint, HuggingFaceEndpoint):
-            self.llm = ChatHuggingFace(llm=self.llm_endpoint, model_id=args.model)
-        elif isinstance(self.llm_endpoint, ChatOpenAI):
-            self.llm = self.llm_endpoint
+        self.llm = wrap_chat(self.llm_endpoint, args.model)
 
         tools = self.tools_descriptions
 
@@ -133,27 +130,21 @@ class ReActAgentwithLanggraph(BaseAgent):
         except Exception as e:
             return str(e)
 
-###############################################################################
-from langgraph.managed import IsLastStep
-from langgraph.graph.message import add_messages
-from langchain_core.messages import (
-    AIMessage,
-    BaseMessage,
-    SystemMessage,
-)
-from langgraph.prebuilt import ToolNode
-from langgraph.graph import END, StateGraph
+
+from typing import Annotated, Sequence, TypedDict
+
+from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
 from langchain_core.prompts import PromptTemplate
-from typing import (
-    Annotated,
-    Callable,
-    Optional,
-    Sequence,
-    Type,
-    TypedDict,
-    TypeVar,
-    Union,
-)
+from langgraph.graph import END, StateGraph
+from langgraph.graph.message import add_messages
+
+###############################################################################
+# ReAct Agent:
+# Temporary workaround for open-source LLM served by TGI-gaudi
+# Only validated with with Llama3.1-70B-Instruct model served with TGI-gaudi
+from langgraph.managed import IsLastStep
+from langgraph.prebuilt import ToolNode
+
 
 class AgentState(TypedDict):
     """The state of the agent."""
@@ -163,55 +154,37 @@ class AgentState(TypedDict):
 
 
 class ReActAgentNodeLlama:
-    """
-    Do planning and reasoning and generate tool calls.
+    """Do planning and reasoning and generate tool calls.
+
     A workaround for open-source llm served by TGI-gaudi.
     """
+
     def __init__(self, llm_endpoint, model_id, tools, args):
         from .prompt import REACT_AGENT_LLAMA_PROMPT
         from .utils import ReActLlamaOutputParser
-        from .utils import describe_tools
-        from sentence_transformers import SentenceTransformer
 
         output_parser = ReActLlamaOutputParser()
         prompt = PromptTemplate(
             template=REACT_AGENT_LLAMA_PROMPT,
             input_variables=["input", "history", "tools"],
         )
-        llm = ChatHuggingFace(llm=llm_endpoint, model_id=model_id)
+        # llm = ChatHuggingFace(llm=llm_endpoint, model_id=model_id)
+        llm = wrap_chat(llm_endpoint, model_id)
         self.tools = tools
         self.chain = prompt | llm | output_parser
 
-        # for selecting tools during runtime
-        if args.select_tool:
-            print("@@@@@ Selecting tools during runtime.")
-            self.select_tool = True
-            self.embed_model = SentenceTransformer("BAAI/bge-base-en-v1.5")
-            self.tools_descriptions = describe_tools(tools)
-            self.tools_embeddings = self.embed_model.encode(self.tools_descriptions)
-            self.tool_topk=args.tool_topk
-        else:
-            self.select_tool = False
-
     def __call__(self, state):
-        from .utils import convert_json_to_tool_call, assemble_history
-        from .utils import select_tools_for_query, get_selected_tools
+        from .utils import assemble_history, convert_json_to_tool_call
+
         print("---CALL Agent node---")
         messages = state["messages"]
 
         # assemble a prompt from messages
         query = messages[0].content
-        history=assemble_history(messages)
+        history = assemble_history(messages)
         print("@@@ History: ", history)
-        if not self.select_tool:
-            # get tools descriptions of all tools
-            tools_descriptions = tool_renderer(self.tools)
-        else:
-            # select tools
-            print("@@@ Selecting tools during runtime.")
-            top_k_tools = select_tools_for_query(query, self.tools_embeddings, self.embed_model, self.tool_topk, self.tools_descriptions)
-            selected_tools = get_selected_tools(top_k_tools, self.tools)
-            tools_descriptions = tool_renderer(selected_tools)
+
+        tools_descriptions = tool_renderer(self.tools)
         print("@@@ Tools description: ", tools_descriptions)
 
         # invoke chain
@@ -227,40 +200,20 @@ class ReActAgentNodeLlama:
                 tool_calls.append(tool_call)
 
         if tool_calls:
-            ai_message=AIMessage(content="", additional_kwargs=add_kw_tc, tool_calls=tool_calls)
+            ai_message = AIMessage(content="", additional_kwargs=add_kw_tc, tool_calls=tool_calls)
+        elif "answer" in output[0]:
+            ai_message = AIMessage(content=output[0]["answer"])
         else:
-            if "answer" in output[0]:
-                ai_message=AIMessage(content=output[0]["answer"])
-            elif "question" in output[0]:
-                ai_message=AIMessage(content=output[0]["question"])
-            else:
-                ai_message=AIMessage(content=output)
-
-        # answer = None
-        # tool_calls = []
-        # for res in output:
-        #     if "answer" in res:
-        #         answer = res["answer"]
-        #         break
-        #     elif "tool" in res:
-        #         add_kw_tc, tool_call = convert_json_to_tool_call(res)
-        #         # print("Tool call:\n", tool_call)
-        #         tool_calls.append(tool_call)
-
-        # if answer:
-        #     ai_message=AIMessage(content=answer)  
-        # elif tool_calls:
-        #     ai_message=AIMessage(content="", additional_kwargs=add_kw_tc, tool_calls=tool_calls)
-        # else:
-        #     ai_message=AIMessage(content=output)
-
+            ai_message = AIMessage(content=output)
         return {"messages": [ai_message]}
 
 
 class ReActAgentLlama(BaseAgent):
     def __init__(self, args, with_memory=False):
         super().__init__(args)
-        agent = ReActAgentNodeLlama(llm_endpoint=self.llm_endpoint, model_id=args.model, tools=self.tools_descriptions, args=args)
+        agent = ReActAgentNodeLlama(
+            llm_endpoint=self.llm_endpoint, model_id=args.model, tools=self.tools_descriptions, args=args
+        )
         tool_node = ToolNode(self.tools_descriptions)
 
         workflow = StateGraph(AgentState)
@@ -296,8 +249,10 @@ class ReActAgentLlama(BaseAgent):
         # This means that after `tools` is called, `agent` node is called next.
         workflow.add_edge("tools", "agent")
 
-        self.app = workflow.compile()
-
+        if with_memory:
+            self.app = workflow.compile(checkpointer=MemorySaver())
+        else:
+            self.app = workflow.compile()
 
     # Define the function that determines whether to continue or not
     def should_continue(self, state: AgentState):
@@ -312,3 +267,34 @@ class ReActAgentLlama(BaseAgent):
 
     def prepare_initial_state(self, query):
         return {"messages": [HumanMessage(content=query)]}
+
+    async def stream_generator(self, query, config):
+        initial_state = self.prepare_initial_state(query)
+        try:
+            async for event in self.app.astream(initial_state, config=config):
+                for node_name, node_state in event.items():
+                    yield f"--- CALL {node_name} ---\n"
+                    for k, v in node_state.items():
+                        if v is not None:
+                            yield f"{k}: {v}\n"
+
+                yield f"data: {repr(event)}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            yield str(e)
+
+    async def non_streaming_run(self, query, config):
+        initial_state = self.prepare_initial_state(query)
+        try:
+            async for s in self.app.astream(initial_state, config=config, stream_mode="values"):
+                message = s["messages"][-1]
+                if isinstance(message, tuple):
+                    print(message)
+                else:
+                    message.pretty_print()
+
+            last_message = s["messages"][-1]
+            print("******Response: ", last_message.content)
+            return last_message.content
+        except Exception as e:
+            return str(e)

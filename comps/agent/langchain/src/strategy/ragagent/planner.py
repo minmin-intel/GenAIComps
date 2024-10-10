@@ -4,22 +4,21 @@
 from typing import Annotated, Any, Literal, Sequence, TypedDict
 
 from langchain.output_parsers import PydanticOutputParser
-from langchain_core.messages import BaseMessage, HumanMessage, ToolMessage, AIMessage
-from langchain_core.output_parsers import StrOutputParser
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
+from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 from langchain_core.output_parsers.openai_tools import PydanticToolsParser
 from langchain_core.prompts import PromptTemplate
-from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
-from langchain_core.output_parsers import JsonOutputParser
-
+from pydantic import BaseModel, Field
 
 from ..base_agent import BaseAgent
-from .prompt import DOC_GRADER_PROMPT, RAG_PROMPT, QueryWriterLlamaPrompt, QueryWriterLlamaPrompt_multiquery
+from .prompt import DOC_GRADER_PROMPT, RAG_PROMPT, QueryWriterLlamaPrompt
+from ...utils import wrap_chat
 
 instruction = "Retrieved document is not sufficient or relevant to answer the query. Reformulate the query to search knowledge base again."
 MAX_RETRY = 3
@@ -137,6 +136,7 @@ class TextGenerator:
 
     def __call__(self, state):
         from .utils import aggregate_docs
+
         print("---GENERATE---")
         messages = state["messages"]
         question = messages[0].content
@@ -148,9 +148,9 @@ class TextGenerator:
         #     if isinstance(m, ToolMessage):
         #         last_message = m
         #         break
+        # docs = last_message.content
 
         question = messages[0].content
-        # docs = last_message.content
         docs = aggregate_docs(messages)
 
         # Run
@@ -165,8 +165,8 @@ class RAGAgent(BaseAgent):
         super().__init__(args)
 
         # Define Nodes
-        
-        if args.strategy =="rag_agent":
+
+        if args.strategy == "rag_agent":
             query_writer = QueryWriter(self.llm_endpoint, args.model, self.tools_descriptions)
             document_grader = DocumentGrader(self.llm_endpoint, args.model)
         elif args.strategy == "rag_agent_llama":
@@ -261,37 +261,34 @@ class RAGAgent(BaseAgent):
             return str(e)
 
 
-class RetrievalToolCall(BaseModel):
-    query: str = Field(description="search query to be sent to the knowledge base.")
-    answer: str = Field(description="direct answer to user's question.")
-    
-
 class QueryWriterLlama:
-    """
-    Temporary workaround to use LLM with TGI-Gaudi.
+    """Temporary workaround to use LLM with TGI-Gaudi.
+
     Use custom output parser to parse text string from LLM into tool calls.
     Only support one tool. Does NOT support multiple tools.
+    The tool input variable must be "query".
     Only validated with llama3.1-70B-instruct.
     Output of the chain is AIMessage.
     Streaming=false is required for this chain.
-    Currently assumes each LLM output only has one tool call.
     """
+
     def __init__(self, llm_endpoint, model_id, tools):
         from .utils import QueryWriterLlamaOutputParser
+
         assert len(tools) == 1, "Only support one tool, passed in {} tools".format(len(tools))
-        # output_parser = JsonOutputParser(pydantic_object=RetrievalToolCall)
         output_parser = QueryWriterLlamaOutputParser()
-        # print("Format instructions: ", output_parser.get_format_instructions())
         prompt = PromptTemplate(
-            template=QueryWriterLlamaPrompt_multiquery,
+            template=QueryWriterLlamaPrompt,
             input_variables=["question", "history", "feedback"],
         )
-        llm = ChatHuggingFace(llm=llm_endpoint, model_id=model_id)
+        # llm = ChatHuggingFace(llm=llm_endpoint, model_id=model_id)
+        llm = wrap_chat(llm_endpoint, model_id)
         self.tools = tools
         self.chain = prompt | llm | output_parser
 
     def __call__(self, state):
-        from .utils import convert_json_to_tool_call, assemble_history
+        from .utils import assemble_history, convert_json_to_tool_call
+
         print("---CALL QueryWriter---")
         messages = state["messages"]
 
@@ -313,7 +310,8 @@ class QueryWriterLlama:
         # We return a list, because this will get added to the existing list
         # return {"messages": [response], "output": response}
         ######################################################################
-        
+
+        ############ allow multiple tool calls in one AI message ############
         tool_calls = []
         for res in response:
             if "query" in res:
@@ -322,10 +320,10 @@ class QueryWriterLlama:
                 tool_calls.append(tool_call)
 
         if tool_calls:
-            ai_message=AIMessage(content="", additional_kwargs=add_kw_tc, tool_calls=tool_calls)
+            ai_message = AIMessage(content="", additional_kwargs=add_kw_tc, tool_calls=tool_calls)
         else:
-            ai_message=AIMessage(content=response[0]["answer"])
-        
+            ai_message = AIMessage(content=response[0]["answer"])
+
         return {"messages": [ai_message], "output": ai_message.content}
 
 
@@ -340,43 +338,41 @@ class DocumentGraderLlama:
     """
 
     def __init__(self, llm_endpoint, model_id=None):
-        from .prompt import DOC_GRADER_Llama_PROMPT, DOC_GRADER_Llama_PROMPT_v2
-        class grade(BaseModel):
-            """Binary score for relevance check."""
-
-            binary_score: str = Field(description="Relevance score 'yes' or 'no'")
+        from .prompt import DOC_GRADER_Llama_PROMPT
 
         # Prompt
         prompt = PromptTemplate(
-            template=DOC_GRADER_Llama_PROMPT, #DOC_GRADER_PROMPT, 
+            template=DOC_GRADER_Llama_PROMPT,
             input_variables=["context", "question"],
         )
 
         if isinstance(llm_endpoint, HuggingFaceEndpoint):
-            llm = ChatHuggingFace(llm=llm_endpoint, model_id=model_id).bind_tools([grade])
+            llm = ChatHuggingFace(llm=llm_endpoint, model_id=model_id)
         elif isinstance(llm_endpoint, ChatOpenAI):
-            llm = llm_endpoint.bind_tools([grade])
-        output_parser = PydanticToolsParser(tools=[grade], first_tool_only=True)
-        self.chain = prompt | llm | output_parser
+            llm = llm_endpoint
+        self.chain = prompt | llm
 
     def __call__(self, state) -> Literal["generate", "rewrite"]:
         from .utils import aggregate_docs
+
         print("---CALL DocumentGrader---")
         messages = state["messages"]
-        
+
         question = messages[0].content  # the original query
         docs = aggregate_docs(messages)
         print("@@@@ Docs: ", docs)
 
         scored_result = self.chain.invoke({"question": question, "context": docs})
 
-        score = scored_result.binary_score
+        score = scored_result.content
+        print("@@@@ Score: ", score)
 
-        if score.startswith("yes"):
+        # if score.startswith("yes"):
+        if "yes" in score.lower():
             print("---DECISION: DOCS RELEVANT---")
             return {"doc_score": "generate"}
 
         else:
-            print(f"---DECISION: DOCS NOT RELEVANT---")
+            print("---DECISION: DOCS NOT RELEVANT---")
 
             return {"messages": [HumanMessage(content=instruction)], "doc_score": "rewrite"}
