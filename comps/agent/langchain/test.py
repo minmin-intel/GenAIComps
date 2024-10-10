@@ -159,7 +159,7 @@ def test_ut(args):
 def test_vllm(args):
     from src.utils import setup_vllm_client
     llm = setup_vllm_client(args)
-    print(llm.invoke("What is deep learning?"))
+    print(llm.invoke("What is deep learning?").content)
 
 
 if __name__ == "__main__":
