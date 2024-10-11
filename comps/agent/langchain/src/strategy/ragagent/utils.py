@@ -18,13 +18,15 @@ class QueryWriterLlamaOutputParser(BaseOutputParser):
         output = []
         for line in json_lines:
             try:
-                output.append(json.loads(line))
+                parsed = json.loads(line)
+                if isinstance(parsed, dict):
+                    output.append(json.loads(line))
             except Exception as e:
                 print("Exception happened in output parsing: ", str(e))
         if output:
             return output
         else:
-            return None
+            return "Error occurred when parsing LLM output."
 
 
 def convert_json_to_tool_call(json_str, tool):
