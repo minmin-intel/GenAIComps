@@ -67,3 +67,52 @@ def assemble_history(messages):
         elif isinstance(m, ToolMessage):
             query_history += f"Tool Output: {m.content}\n"
     return query_history
+
+def describe_tools(tools):
+    function_info = []
+    for tool in tools:
+        function_name = tool.name
+        doc_string = tool.description
+        if function_name != "search_knowledge_base": # right now this is hard coded, in future can be a must-include list
+            function_info.append("{}: {}".format(function_name, doc_string))
+        # print("-"*50)
+    return function_info
+
+def sort_list(list1, list2):
+    import numpy as np
+    # Use numpy's argsort function to get the indices that would sort the second list
+    idx = np.argsort(list2)# ascending order
+    return np.array(list1)[idx].tolist()[::-1]# descending order
+
+def get_topk_tools(topk, tools, similarities):
+    sorted_tools = sort_list(tools, similarities)
+    # print(sorted_tools)
+    top_k_tools = sorted_tools[:topk]
+    return [x.split(':')[0] for x in top_k_tools]
+
+def select_tools_for_query(query, tools_embedding, model, topk, tools_descriptions):
+    # tool descriptions is a list of strings as returned by describe_tools
+    query_embedding = model.encode(query)
+    similarities = model.similarity(query_embedding, tools_embedding).flatten() # 1D array
+    top_k_tools = get_topk_tools(topk, tools_descriptions, similarities)
+    return top_k_tools
+
+def get_tool_with_name(tool_name, tools):
+    # tools = get_all_available_tools()
+    for tool in tools:
+        if tool.name == tool_name:
+            return tool
+    return None
+
+def get_selected_tools(top_k_tools, tools):
+    selected_tools = []
+    for tool_name in top_k_tools:
+        tool = get_tool_with_name(tool_name, tools)
+        if tool is not None:
+            selected_tools.append(tool)
+    try:
+        selected_tools.append(get_tool_with_name("search_knowledge_base", tools))
+    except:
+        pass
+    # print("Selected tools: ", selected_tools)
+    return selected_tools

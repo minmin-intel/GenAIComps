@@ -1,6 +1,6 @@
 MODEL="meta-llama/Meta-Llama-3.1-70B-Instruct"
 LLMENDPOINT=http://${host_ip}:8085
-STRATEGY=rag_agent_llama #react_llama
+STRATEGY=react_llama #rag_agent_llama #
 TEMPERATURE=0.01
 TOPK=10
 
