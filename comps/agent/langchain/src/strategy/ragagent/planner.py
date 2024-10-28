@@ -15,6 +15,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 from pydantic import BaseModel, Field
+from transformers import AutoTokenizer
 
 from ..base_agent import BaseAgent
 from .prompt import DOC_GRADER_PROMPT, RAG_PROMPT, QueryWriterLlamaPrompt
@@ -277,15 +278,17 @@ class QueryWriterLlama:
 
         assert len(tools) == 1, "Only support one tool, passed in {} tools".format(len(tools))
         output_parser = QueryWriterLlamaOutputParser()
-        prompt = PromptTemplate(
-            template=QueryWriterLlamaPrompt,
-            input_variables=["question", "history", "feedback"],
-        )
+        # prompt = PromptTemplate(
+        #     template=QueryWriterLlamaPrompt,
+        #     input_variables=["question", "history", "feedback"],
+        # )
         # llm = ChatHuggingFace(llm=llm_endpoint, model_id=model_id)
         # llm = wrap_chat(llm_endpoint, model_id)
         llm = setup_hf_tgi_client(args)
+        self.tokenizer = AutoTokenizer.from_pretrained(args.model)
         self.tools = tools
-        self.chain = prompt | llm | output_parser
+        # self.chain = prompt | llm | output_parser
+        self.chain = llm | output_parser
 
     def __call__(self, state):
         from .utils import assemble_history, convert_json_to_tool_call
@@ -297,7 +300,9 @@ class QueryWriterLlama:
         history = assemble_history(messages)
         feedback = instruction
 
-        response = self.chain.invoke({"question": question, "history": history, "feedback": feedback})
+        prompt = QueryWriterLlamaPrompt.format(question=question, history=history, feedback=feedback)
+        chat_prompt = self.tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
+        response = self.chain.invoke(chat_prompt)
         print("Response from query writer llm: ", response)
 
         ### Code below assumes one tool call in the response ##############
@@ -342,17 +347,20 @@ class DocumentGraderLlama:
         from .prompt import DOC_GRADER_Llama_PROMPT
 
         # Prompt
-        prompt = PromptTemplate(
-            template=DOC_GRADER_Llama_PROMPT,
-            input_variables=["context", "question"],
-        )
+        # prompt = PromptTemplate(
+        #     template=DOC_GRADER_Llama_PROMPT,
+        #     input_variables=["context", "question"],
+        # )
 
         # llm = wrap_chat(llm_endpoint, model_id)
         llm = setup_hf_tgi_client(args)
-        self.chain = prompt | llm
+        self.tokenizer = AutoTokenizer.from_pretrained(args.model)
+        # self.chain = prompt | llm
+        self.chain = llm
 
     def __call__(self, state) -> Literal["generate", "rewrite"]:
         from .utils import aggregate_docs
+        from .prompt import DOC_GRADER_Llama_PROMPT
 
         print("---CALL DocumentGrader---")
         messages = state["messages"]
@@ -361,7 +369,11 @@ class DocumentGraderLlama:
         docs = aggregate_docs(messages)
         print("@@@@ Docs: ", docs)
 
-        scored_result = self.chain.invoke({"question": question, "context": docs})
+        prompt = DOC_GRADER_Llama_PROMPT.format(question=question, context=docs)
+        chat_prompt = self.tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
+
+        # scored_result = self.chain.invoke({"question": question, "context": docs})
+        scored_result = self.chain.invoke(chat_prompt)
 
         try:
             score = scored_result.content

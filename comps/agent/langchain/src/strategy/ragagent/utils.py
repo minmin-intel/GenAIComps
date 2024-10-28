@@ -23,7 +23,7 @@ class QueryWriterLlamaOutputParser(BaseOutputParser):
                 print("line: ", line)
                 parsed = json.loads(line)
                 if isinstance(parsed, dict):
-                    output.append(json.loads(line))
+                    output.append(parsed)
             except Exception as e:
                 print("Exception happened in output parsing: ", str(e))
         if output:
