@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 
 from ..base_agent import BaseAgent
 from .prompt import DOC_GRADER_PROMPT, RAG_PROMPT, QueryWriterLlamaPrompt
-from ...utils import wrap_chat
+from ...utils import wrap_chat, setup_hf_tgi_client
 
 instruction = "Retrieved document is not sufficient or relevant to answer the query. Reformulate the query to search knowledge base again."
 MAX_RETRY = 3
@@ -170,8 +170,8 @@ class RAGAgent(BaseAgent):
             query_writer = QueryWriter(self.llm_endpoint, args.model, self.tools_descriptions)
             document_grader = DocumentGrader(self.llm_endpoint, args.model)
         elif args.strategy == "rag_agent_llama":
-            query_writer = QueryWriterLlama(self.llm_endpoint, args.model, self.tools_descriptions)
-            document_grader = DocumentGraderLlama(self.llm_endpoint, args.model)
+            query_writer = QueryWriterLlama(args, self.tools_descriptions)
+            document_grader = DocumentGraderLlama(args)
         text_generator = TextGenerator(self.llm_endpoint)
         retriever = Retriever.create(self.tools_descriptions)
 
@@ -272,7 +272,7 @@ class QueryWriterLlama:
     Streaming=false is required for this chain.
     """
 
-    def __init__(self, llm_endpoint, model_id, tools):
+    def __init__(self, args, tools):
         from .utils import QueryWriterLlamaOutputParser
 
         assert len(tools) == 1, "Only support one tool, passed in {} tools".format(len(tools))
@@ -282,7 +282,8 @@ class QueryWriterLlama:
             input_variables=["question", "history", "feedback"],
         )
         # llm = ChatHuggingFace(llm=llm_endpoint, model_id=model_id)
-        llm = wrap_chat(llm_endpoint, model_id)
+        # llm = wrap_chat(llm_endpoint, model_id)
+        llm = setup_hf_tgi_client(args)
         self.tools = tools
         self.chain = prompt | llm | output_parser
 
@@ -337,7 +338,7 @@ class DocumentGraderLlama:
         str: A decision for whether the documents are relevant or not
     """
 
-    def __init__(self, llm_endpoint, model_id=None):
+    def __init__(self, args):
         from .prompt import DOC_GRADER_Llama_PROMPT
 
         # Prompt
@@ -346,11 +347,8 @@ class DocumentGraderLlama:
             input_variables=["context", "question"],
         )
 
-        # if isinstance(llm_endpoint, HuggingFaceEndpoint):
-        #     llm = ChatHuggingFace(llm=llm_endpoint, model_id=model_id)
-        # elif isinstance(llm_endpoint, ChatOpenAI):
-        #     llm = llm_endpoint
-        llm = wrap_chat(llm_endpoint, model_id)
+        # llm = wrap_chat(llm_endpoint, model_id)
+        llm = setup_hf_tgi_client(args)
         self.chain = prompt | llm
 
     def __call__(self, state) -> Literal["generate", "rewrite"]:

@@ -12,7 +12,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import create_react_agent
 
 from ...global_var import threads_global_kv
-from ...utils import has_multi_tool_inputs, tool_renderer, wrap_chat
+from ...utils import has_multi_tool_inputs, tool_renderer, wrap_chat, setup_hf_tgi_client
 from ..base_agent import BaseAgent
 from .prompt import REACT_SYS_MESSAGE, hwchase17_react_prompt
 
@@ -171,7 +171,8 @@ class ReActAgentNodeLlama:
             input_variables=["input", "history", "tools"],
         )
         # llm = ChatHuggingFace(llm=llm_endpoint, model_id=model_id)
-        llm = wrap_chat(llm_endpoint, model_id)
+        # llm = wrap_chat(llm_endpoint, model_id)
+        llm = setup_hf_tgi_client(args)
         self.tools = tools
         self.chain = prompt | llm | output_parser
 
