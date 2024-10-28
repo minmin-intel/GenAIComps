@@ -23,7 +23,7 @@ python3 benchmark.py \
 --llm_endpoint_url ${LLMENDPOINT} \
 --temperature ${TEMPERATURE} \
 --top_k ${TOPK} \
---max_new_tokens 4096 \
+--max_new_tokens 8192 \
 --strategy ${STRATEGY} \
 --recursion_limit 16 \
 --filedir ${FILEDIR} \
@@ -31,7 +31,7 @@ python3 benchmark.py \
 --output ${OUTPUT} \
 --tools $TOOLS \
 --agent_endpoint_url ${AGENT_ENDPOINT} \
---test_llama \
+--test_api \
 --select_tool true \
 --stream false \
 --llm_engine tgi

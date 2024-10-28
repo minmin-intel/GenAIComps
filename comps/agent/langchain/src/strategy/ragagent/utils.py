@@ -14,10 +14,13 @@ class QueryWriterLlamaOutputParser(BaseOutputParser):
     def parse(self, text: str):
         print("raw output from llm: ", text)
         json_lines = text.split("\n")
-        print("json_lines: ", json_lines)
+        # print("json_lines: ", json_lines)
         output = []
         for line in json_lines:
             try:
+                if "assistant" in line:
+                    line = line.replace("assistant", "")
+                print("line: ", line)
                 parsed = json.loads(line)
                 if isinstance(parsed, dict):
                     output.append(json.loads(line))
