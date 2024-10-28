@@ -301,6 +301,9 @@ class QueryWriterLlama:
         feedback = instruction
 
         prompt = QueryWriterLlamaPrompt.format(question=question, history=history, feedback=feedback)
+        prompt = [
+            {"role": "user", "content": prompt},
+        ]
         chat_prompt = self.tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
         response = self.chain.invoke(chat_prompt)
         print("Response from query writer llm: ", response)
@@ -370,6 +373,9 @@ class DocumentGraderLlama:
         print("@@@@ Docs: ", docs)
 
         prompt = DOC_GRADER_Llama_PROMPT.format(question=question, context=docs)
+        prompt = [
+            {"role": "user", "content": prompt},
+        ]
         chat_prompt = self.tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
 
         # scored_result = self.chain.invoke({"question": question, "context": docs})
