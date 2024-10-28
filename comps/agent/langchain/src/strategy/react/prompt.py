@@ -43,7 +43,7 @@ Follow these guidelines when formulating your answer:
 2. If you are uncertain or do not know the answer, answer “I don't know”.
 3. Give concise, factual and relevant answers.
 
-IMPORTANT: You should either make tool calls or provide an answer. 
+IMPORTANT: You should either make tool calls or provide an answer. If you can provide an answer, do not make tool calls, just output the answer.
 
 User request: {input}
 Now begin!

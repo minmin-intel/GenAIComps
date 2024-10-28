@@ -15,7 +15,7 @@ export LLM_MODEL_ID="meta-llama/Meta-Llama-3.1-70B-Instruct"
 # export NUM_SHARDS=4
 export LLM_ENDPOINT_URL="http://${ip_address}:8085"
 export temperature=0.01
-export max_new_tokens=4096
+export max_new_tokens=8192
 
 # agent related environment variables
 export TOOLSET_PATH=$WORKDIR/GenAIComps/comps/agent/langchain/tools/

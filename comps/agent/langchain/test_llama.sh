@@ -6,7 +6,7 @@ TOPK=10
 
 FILEDIR=$WORKDIR/datasets/crag_qas/
 FILENAME=crag_qa_music_sampled_with_query_time.jsonl #crag_20_answerable_queries.csv #
-OUTPUT=$WORKDIR/datasets/crag_results/ragagent_vllm_llama3.1-70B-instruct_92queries.csv
+OUTPUT=$WORKDIR/datasets/crag_results/react_tgi_hfendp_llama3.1-70B-instruct_92queries.csv
 TOOLS=tools/supervisor_agent_tools.yaml
 
 
@@ -34,4 +34,4 @@ python3 benchmark.py \
 --test_llama \
 --select_tool true \
 --stream false \
---llm_engine vllm
+--llm_engine tgi
