@@ -19,6 +19,10 @@ class ReActLlamaOutputParser(BaseOutputParser):
         output = []
         for line in json_lines:
             try:
+                if "TOOL CALL:" in line:
+                    line = line.replace("TOOL CALL:", "")
+                if "FINAL ANSWER:" in line:
+                    line = line.replace("FINAL ANSWER:", "")
                 if "assistant" in line:
                     line = line.replace("assistant", "")
                 print("line: ", line)
