@@ -19,7 +19,7 @@ from transformers import AutoTokenizer
 
 from ..base_agent import BaseAgent
 from .prompt import DOC_GRADER_PROMPT, RAG_PROMPT, QueryWriterLlamaPrompt
-from ...utils import wrap_chat, setup_hf_tgi_client
+from ...utils import wrap_chat, setup_hf_tgi_client, setup_vllm_client
 
 instruction = "Retrieved document is not sufficient or relevant to answer the query. Reformulate the query to search knowledge base again."
 MAX_RETRY = 3
@@ -170,10 +170,12 @@ class RAGAgent(BaseAgent):
         if args.strategy == "rag_agent":
             query_writer = QueryWriter(self.llm_endpoint, args.model, self.tools_descriptions)
             document_grader = DocumentGrader(self.llm_endpoint, args.model)
+            text_generator = TextGenerator(self.llm_endpoint)
         elif args.strategy == "rag_agent_llama":
             query_writer = QueryWriterLlama(args, self.tools_descriptions)
             document_grader = DocumentGraderLlama(args)
-        text_generator = TextGenerator(self.llm_endpoint)
+            text_generator = TextGeneratorLlama(args)
+        
         retriever = Retriever.create(self.tools_descriptions)
 
         # Define graph
@@ -277,18 +279,24 @@ class QueryWriterLlama:
         from .utils import QueryWriterLlamaOutputParser
 
         assert len(tools) == 1, "Only support one tool, passed in {} tools".format(len(tools))
-        output_parser = QueryWriterLlamaOutputParser()
-        # prompt = PromptTemplate(
-        #     template=QueryWriterLlamaPrompt,
-        #     input_variables=["question", "history", "feedback"],
-        # )
-        # llm = ChatHuggingFace(llm=llm_endpoint, model_id=model_id)
-        # llm = wrap_chat(llm_endpoint, model_id)
-        llm = setup_hf_tgi_client(args)
-        self.tokenizer = AutoTokenizer.from_pretrained(args.model)
         self.tools = tools
-        # self.chain = prompt | llm | output_parser
-        self.chain = llm | output_parser
+
+        self.args = args
+
+        output_parser = QueryWriterLlamaOutputParser()
+        if args.llm_api_mode == "hf_endpoint":
+            llm = setup_hf_tgi_client(args)
+            self.tokenizer = AutoTokenizer.from_pretrained(args.model)
+            self.chain = llm | output_parser
+        elif args.llm_api_mode == "chat_openai":
+            llm = setup_vllm_client(args) #ChatOpenAI
+            prompt = PromptTemplate(
+                template=QueryWriterLlamaPrompt,
+                input_variables=["question", "history", "feedback"],
+            )
+            self.chain = prompt | llm | output_parser
+        else:
+            raise ValueError("llm_api_mode must be chat_openai or hf_endpoint")
 
     def __call__(self, state):
         from .utils import assemble_history, convert_json_to_tool_call
@@ -300,12 +308,18 @@ class QueryWriterLlama:
         history = assemble_history(messages)
         feedback = instruction
 
-        prompt = QueryWriterLlamaPrompt.format(question=question, history=history, feedback=feedback)
-        prompt = [
-            {"role": "user", "content": prompt},
-        ]
-        chat_prompt = self.tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
-        response = self.chain.invoke(chat_prompt)
+        if self.args.llm_api_mode == "hf_endpoint":
+            prompt = QueryWriterLlamaPrompt.format(question=question, history=history, feedback=feedback)
+            prompt = [
+                {"role": "user", "content": prompt},
+            ]
+            chat_prompt = self.tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
+            response = self.chain.invoke(chat_prompt)
+        elif self.args.llm_api_mode == "chat_openai":
+            response = self.chain.invoke({"question": question, "history": history, "feedback": feedback})
+        else:
+            raise ValueError("llm_api_mode must be chat_openai or hf_endpoint")
+        
         print("Response from query writer llm: ", response)
 
         ### Code below assumes one tool call in the response ##############
@@ -348,18 +362,20 @@ class DocumentGraderLlama:
 
     def __init__(self, args):
         from .prompt import DOC_GRADER_Llama_PROMPT
-
-        # Prompt
-        # prompt = PromptTemplate(
-        #     template=DOC_GRADER_Llama_PROMPT,
-        #     input_variables=["context", "question"],
-        # )
-
         # llm = wrap_chat(llm_endpoint, model_id)
-        llm = setup_hf_tgi_client(args)
-        self.tokenizer = AutoTokenizer.from_pretrained(args.model)
-        # self.chain = prompt | llm
-        self.chain = llm
+        if args.llm_api_mode == "chat_openai":
+            llm = setup_vllm_client(args)
+            prompt = PromptTemplate(
+                template=DOC_GRADER_Llama_PROMPT,
+                input_variables=["context", "question"],
+            )
+            self.chain = prompt | llm
+        elif args.llm_api_mode == "hf_endpoint":
+            llm = setup_hf_tgi_client(args)
+            self.tokenizer = AutoTokenizer.from_pretrained(args.model)
+            self.chain = llm
+        else:
+            raise ValueError("llm_api_mode must be chat_openai or hf_endpoint")
 
     def __call__(self, state) -> Literal["generate", "rewrite"]:
         from .utils import aggregate_docs
@@ -372,14 +388,17 @@ class DocumentGraderLlama:
         docs = aggregate_docs(messages)
         print("@@@@ Docs: ", docs)
 
-        prompt = DOC_GRADER_Llama_PROMPT.format(question=question, context=docs)
-        prompt = [
-            {"role": "user", "content": prompt},
-        ]
-        chat_prompt = self.tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
-
-        # scored_result = self.chain.invoke({"question": question, "context": docs})
-        scored_result = self.chain.invoke(chat_prompt)
+        if self.args.llm_api_mode == "hf_endpoint":
+            prompt = DOC_GRADER_Llama_PROMPT.format(question=question, context=docs)
+            prompt = [
+                {"role": "user", "content": prompt},
+            ]
+            chat_prompt = self.tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
+            scored_result = self.chain.invoke(chat_prompt)
+        elif self.args.llm_api_mode == "chat_openai":
+            scored_result = self.chain.invoke({"question": question, "context": docs})
+        else:
+            raise ValueError("llm_api_mode must be chat_openai or hf_endpoint")
 
         try:
             score = scored_result.content
@@ -396,3 +415,51 @@ class DocumentGraderLlama:
             print("---DECISION: DOCS NOT RELEVANT---")
 
             return {"messages": [HumanMessage(content=instruction)], "doc_score": "rewrite"}
+        
+class TextGeneratorLlama:
+    """Generate answer.
+
+    Args:
+        state (messages): The current state
+
+    Returns:
+        dict: The updated state with re-phrased question
+    """
+
+    def __init__(self, args):
+        self.args = args
+        if args.llm_api_mode == "hf_endpoint":
+            llm = setup_hf_tgi_client(args)
+            self.tokenizer = AutoTokenizer.from_pretrained(args.model)
+            self.rag_chain = llm
+        elif args.llm_api_mode == "chat_openai":
+            prompt = RAG_PROMPT
+            llm = setup_vllm_client(args)
+            self.rag_chain = prompt | llm #| StrOutputParser()
+        else:
+            raise ValueError("llm_api_mode must be chat_openai or hf_endpoint")
+
+    def __call__(self, state):
+        from .utils import aggregate_docs
+
+        print("---GENERATE---")
+        messages = state["messages"]
+        question = messages[0].content
+        query_time = state["query_time"]
+
+        question = messages[0].content
+        docs = aggregate_docs(messages)
+
+        # Run
+        if self.args.llm_api_mode == "hf_endpoint":
+            prompt = RAG_PROMPT.format(question=question, context=docs, time=query_time)
+            prompt = [
+                {"role": "user", "content": prompt},
+            ]
+            chat_prompt = self.tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
+            response = self.rag_chain.invoke(chat_prompt)
+        elif self.args.llm_api_mode == "chat_openai":
+            response = self.rag_chain.invoke({"context": docs, "question": question, "time": query_time})
+        print("@@@@ Used this doc for generation:\n", docs)
+        print("@@@@ Generated response: ", response)
+        return {"messages": [response], "output": response}

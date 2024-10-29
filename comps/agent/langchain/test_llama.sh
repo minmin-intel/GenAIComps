@@ -34,4 +34,5 @@ python3 benchmark.py \
 --test_api \
 --select_tool true \
 --stream false \
---llm_engine tgi
+--llm_engine tgi \
+--llm_api_mode chat_openai

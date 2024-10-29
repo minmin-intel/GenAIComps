@@ -53,15 +53,15 @@ def setup_hf_tgi_client(args):
 
 
 def setup_vllm_client(args):
-    from langchain_community.llms.vllm import VLLMOpenAI
+    from langchain_openai import ChatOpenAI
 
     openai_endpoint = f"{args.llm_endpoint_url}/v1"
-    llm = VLLMOpenAI(
-        openai_api_key="EMPTY",
-        openai_api_base=openai_endpoint,
-        model_name=args.model,
-        streaming=args.streaming,
-    )
+    params = {
+        "temperature": args.temperature,
+        "max_tokens": args.max_new_tokens,
+        "streaming": args.streaming,
+    }
+    llm = ChatOpenAI(openai_api_key="EMPTY", openai_api_base=openai_endpoint, model_name=args.model, **params)
     return llm
 
 
@@ -133,7 +133,8 @@ def get_args():
     parser.add_argument("--debug", action="store_true", help="Test with endpoint mode")
 
     parser.add_argument("--model", type=str, default="meta-llama/Meta-Llama-3-8B-Instruct")
-    parser.add_argument("--llm_engine", type=str, default="tgi")
+    parser.add_argument("--llm_engine", type=str, default="tgi", help="vllm, tgi, openai")
+    parser.add_argument("--llm_api_mode", type=str, default="chat_openai", help="chat_openai, hf_endpoint")
     parser.add_argument("--llm_endpoint_url", type=str, default="http://localhost:8080")
     parser.add_argument("--max_new_tokens", type=int, default=1024)
     parser.add_argument("--top_k", type=int, default=10)
