@@ -363,6 +363,7 @@ class DocumentGraderLlama:
     def __init__(self, args):
         from .prompt import DOC_GRADER_Llama_PROMPT
         # llm = wrap_chat(llm_endpoint, model_id)
+        self.args = args
         if args.llm_api_mode == "chat_openai":
             llm = setup_vllm_client(args)
             prompt = PromptTemplate(
