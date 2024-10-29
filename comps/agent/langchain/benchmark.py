@@ -149,7 +149,8 @@ def test_llama_agent_api(args):
         # "who has played drums for the red hot chili peppers?",
         # "what's the most recent album from the founder of ysl records?",
         # "when did miley cyrus win grammy best new artist award?",
-        "when was stevie wonder the keyboardist for the band the rolling stones?",
+        # "when was stevie wonder the keyboardist for the band the rolling stones?",
+        "who has had more number one hits on the us billboard r&b/hip-hop songs chart, janet jackson or aretha franklin?",
     ]
     query_time = [
         # "03/01/2024, 00:00:00 PT",

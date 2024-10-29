@@ -259,7 +259,7 @@ class ReActAgentLlama(BaseAgent):
     def __init__(self, args, with_memory=False):
         super().__init__(args)
         agent = ReActAgentNodeLlama(
-            llm_endpoint=self.llm_endpoint, model_id=args.model, tools=self.tools_descriptions, args=args
+            tools=self.tools_descriptions, args=args
         )
         tool_node = ToolNode(self.tools_descriptions)
 

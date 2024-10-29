@@ -15,7 +15,7 @@ export CRAG_SERVER=http://${host_ip}:8080
 export WORKER_AGENT_URL="http://${host_ip}:9095/v1/chat/completions"
 
 
-AGENT_ENDPOINT=$WORKER_AGENT_URL
+AGENT_ENDPOINT="http://${host_ip}:9090/v1/chat/completions" #$WORKER_AGENT_URL
 # echo "AGENT_ENDPOINT: $AGENT_ENDPOINT"
 
 python3 benchmark.py \
