@@ -25,9 +25,10 @@ class ReActLlamaOutputParser(BaseOutputParser):
                     line = line.replace("FINAL ANSWER:", "")
                 if "assistant" in line:
                     line = line.replace("assistant", "")
-                if isinstance(line, dict):
-                    print("line: ", line)
-                    output.append(json.loads(line))
+                parsed_line = json.loads(line)
+                if isinstance(parsed_line, dict):
+                    print("parsed line: ", parsed_line)
+                    output.append(parsed_line)
             except Exception as e:
                 print("Exception happened in output parsing: ", str(e))
         if output:
