@@ -160,7 +160,7 @@ def test_llama_agent_api(args):
         # "03/12/2024, 12:28:41 PT",
         "03/13/2024, 10:01:54 PT",
     ]
-    df = pd.DataFrame({"query": query, "query_time": query_time})
+    #df = pd.DataFrame({"query": query, "query_time": query_time})
     url = args.agent_endpoint_url
     answers = []
     for _, row in df.iterrows():
