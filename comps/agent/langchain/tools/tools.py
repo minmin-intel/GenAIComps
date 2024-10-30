@@ -4,11 +4,7 @@ from tools.pycragapi import CRAG
 
 # using worker agent    
 def search_knowledge_base(query: str, time: str) -> str:
-    """Search the knowledge base for a specific query.
-    Args:
-        query: The query to search for.
-        time: The time the query was asked.
-    """
+    """Search the knowledge base for a specific query."""
     # use worker agent to search the knowledge base
     url = os.environ.get("WORKER_AGENT_URL")
     print(url)

@@ -8,6 +8,9 @@ search_knowledge_base:
     query:
       type: str
       description: query
+    time:
+      type: str
+      description: The time the query was asked.
   return_output: retrieved_data
 
 search_artist_entity_by_name:
