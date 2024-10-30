@@ -249,7 +249,7 @@ class ReActAgentNodeLlama:
         if tool_calls:
             ai_message = AIMessage(content="", additional_kwargs=add_kw_tc, tool_calls=tool_calls)
         elif "answer" in output[0]:
-            ai_message = AIMessage(str(content=output[0]["answer"]))
+            ai_message = AIMessage(content=str(output[0]["answer"]))
         else:
             ai_message = AIMessage(content=output)
         return {"messages": [ai_message]}
