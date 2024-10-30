@@ -3,13 +3,12 @@ import requests
 from tools.pycragapi import CRAG
 
 # using worker agent    
-def search_knowledge_base(query: str, time: str) -> str:
-    """Search the knowledge base for a specific query."""
+def search_knowledge_base(query: str) -> str:
+    """Search knowledge base for a given query. Please include time info for time-sensitive queries."""
     # use worker agent to search the knowledge base
     url = os.environ.get("WORKER_AGENT_URL")
     print(url)
     proxies = {"http": ""}
-    query = "Question: {} \nThe question was asked at: {}".format(query, time)
     payload = {
         "query": query,
     }

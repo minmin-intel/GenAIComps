@@ -2,15 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 search_knowledge_base:
-  description: Search knowledge base for a given query. Returns text related to the query.
+  description: Search knowledge base for a given query. Please include time info for time-sensitive queries.
   callable_api: tools.py:search_knowledge_base
   args_schema:
     query:
       type: str
       description: query
-    time:
-      type: str
-      description: The time the query was asked.
   return_output: retrieved_data
 
 search_artist_entity_by_name:
