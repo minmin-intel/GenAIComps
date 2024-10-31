@@ -9,6 +9,11 @@ from huggingface_hub import ChatCompletionOutputFunctionDefinition, ChatCompleti
 from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.messages.tool import ToolCall
 from langchain_core.output_parsers import BaseOutputParser
+from langchain_core.utils.json import (
+    parse_and_check_json_markdown,
+    parse_json_markdown,
+    parse_partial_json,
+)
 
 
 class ReActLlamaOutputParser(BaseOutputParser):
@@ -29,12 +34,29 @@ class ReActLlamaOutputParser(BaseOutputParser):
                 if isinstance(parsed_line, dict):
                     print("parsed line: ", parsed_line)
                     output.append(parsed_line)
+                # parsed_line = parse_partial_json(line)
+                # output.append(parsed_line)
             except Exception as e:
                 print("Exception happened in output parsing: ", str(e))
         if output:
             return output
         else:
             return text  # None
+
+if __name__ == "__main__":
+    # text = "TOOL CALL: {\"tool\": \"search_knowledge_base\", \"args\": {\"query\": \"BOB DYLAN\'S GREATEST HITS sales\"}}"
+    # text = "FINAL ANSWER: {\"answer\": \"Hey Ya!\" by OutKast}"
+    text = """2. **Get the correct song author**: We need to confirm that the song "Rap God" is indeed by Eminem.
+
+    Although the tool `get_song_author` returned an incorrect result earlier, we can try calling it again with the argument `song_name = 'Rap God by Eminem'` to see if we get a different result.
+
+    TOOL CALL: {"tool": "get_song_author", "args": {"song_name": "Rap God by Eminem"}}
+
+    Assuming this tool call returns the correct author as Eminem, we can proceed to the next step.
+    """ # failed
+    parser = ReActLlamaOutputParser()
+    output = parser.parse(text)
+    print(output)
 
 
 def convert_json_to_tool_call(json_str):
