@@ -31,6 +31,7 @@ def save_results(output_file, output_list):
 def save_as_csv(output):
     df = pd.read_json(output, lines=True, convert_dates=False)
     df.to_csv(output.replace(".jsonl", ".csv"), index=False)
+    print(f"Saved to {output.replace('.jsonl', '.csv')}")
 
 def non_streaming_run(agent, query, config):
     initial_state = agent.prepare_initial_state(query)
@@ -148,30 +149,9 @@ def test_llama_agent_api(args):
     df = get_test_dataset(args)
     print(df.shape)
     
-    query=[
-        # "what song topped the billboard chart on 2004-02-04?",
-        # "what album did maroon five release in 2010, which included the songs 'moves like jagger' and 'misery'?"
-        # "Hello, how are you?",
-        # "tell me the most recent song or album by doris duke?",
-        # "how many tracks are in drake's last album?",
-        # "how many songs has the band the beatles released that have been recorded at abbey road studios?",
-        # "who has played drums for the red hot chili peppers?",
-        # "what's the most recent album from the founder of ysl records?",
-        # "when did miley cyrus win grammy best new artist award?",
-        # "when was stevie wonder the keyboardist for the band the rolling stones?",
-        "who has had more number one hits on the us billboard r&b/hip-hop songs chart, janet jackson or aretha franklin?",
-    ]
-    query_time = [
-        # "03/01/2024, 00:00:00 PT",
-        # "03/01/2024, 00:00:00 PT",
-        # "03/01/2024, 00:00:00 PT",
-        # "03/01/2024, 00:00:00 PT",
-        # "03/12/2024, 12:28:41 PT",
-        "03/13/2024, 10:01:54 PT",
-    ]
-    #df = pd.DataFrame({"query": query, "query_time": query_time})
     url = args.agent_endpoint_url
-    answers = []
+    # answers = []
+    output_list = []
     for _, row in df.iterrows():
         q = row["query"]
         t = row["query_time"]
@@ -180,13 +160,26 @@ def test_llama_agent_api(args):
         print("******Agent is working on the query")
         answer = generate_answer_agent_api(url, prompt)
         print("******Answer:\n", answer)
-        answers.append(answer)
-    if "answer" in df.columns:
-        df.rename(columns={"answer": "ref_answer"}, inplace=True)  
-    df["answer"] = answers
+        # answers.append(answer)
+        output_list.append(
+            {
+                "query": q,
+                "query_time": t,
+                "ref_answer": row["answer"],
+                "answer": answer,
+                "question_type": row["question_type"],
+                "static_or_dynamic": row["static_or_dynamic"],
+            }
+        )
+        save_results(args.output, output_list)
 
-    df.to_csv(args.output, index=False)
-    pass
+    # if "answer" in df.columns:
+    #     df.rename(columns={"answer": "ref_answer"}, inplace=True)  
+    # df["answer"] = answers
+    # df.to_csv(args.output, index=False)
+    # pass
+    save_as_csv(args.output)
+
 
 
 ##############################################################
@@ -248,11 +241,6 @@ def test_local_rag(args):
         )
         save_results(args.output, output_list)
 
-    # if "answer" in df.columns:
-    #     df.rename(columns={"answer": "ref_answer"}, inplace=True)    
-    # df["answer"] = answers
-    # df["context"] = contexts
-    # df.to_csv(args.output, index=False)
     save_as_csv(args.output)
 
 

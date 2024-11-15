@@ -102,6 +102,7 @@ def setup_chat_model(args):
     params = {
         "temperature": args.temperature,
         "max_tokens": args.max_new_tokens,
+        "top_p": args.top_p,
         "streaming": args.streaming,
     }
     llm = ChatOpenAI(openai_api_key="EMPTY", openai_api_base=openai_endpoint, model_name=args.model, **params)

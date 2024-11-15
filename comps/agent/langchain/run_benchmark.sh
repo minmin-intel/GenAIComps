@@ -6,7 +6,7 @@ TOPK=10
 
 FILEDIR=$WORKDIR/datasets/ragagent_eval/
 FILENAME=crag_qa_music.jsonl
-OUTPUT=$WORKDIR/datasets/ragagent_eval/conv_rag_music_full.jsonl
+OUTPUT=$WORKDIR/datasets/ragagent_eval/react_music_full.jsonl
 TOOLS=tools/supervisor_agent_tools.yaml
 
 
@@ -15,14 +15,13 @@ export CRAG_SERVER=http://${host_ip}:8080
 export WORKER_AGENT_URL="http://${host_ip}:9095/v1/chat/completions"
 
 
-AGENT_ENDPOINT="http://${host_ip}:9090/v1/chat/completions" #$WORKER_AGENT_URL
-# echo "AGENT_ENDPOINT: $AGENT_ENDPOINT"
+AGENT_ENDPOINT="http://${host_ip}:9090/v1/chat/completions" 
+
 
 python3 benchmark.py \
 --model ${MODEL} \
 --llm_endpoint_url ${LLMENDPOINT} \
 --temperature ${TEMPERATURE} \
---top_k ${TOPK} \
 --max_new_tokens 8192 \
 --strategy ${STRATEGY} \
 --recursion_limit 16 \
@@ -31,7 +30,7 @@ python3 benchmark.py \
 --output ${OUTPUT} \
 --tools $TOOLS \
 --agent_endpoint_url ${AGENT_ENDPOINT} \
---test_rag \
+--test_api \
 --select_tool true \
 --stream false \
 --llm_engine tgi \
