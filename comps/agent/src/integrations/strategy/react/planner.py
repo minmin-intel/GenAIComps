@@ -156,6 +156,8 @@ from .utils import (
     convert_json_to_tool_call,
     save_state_to_store,
 )
+from .prompt import REACT_AGENT_LLAMA_PROMPT
+from .utils import ReActLlamaOutputParser
 
 
 class AgentState(TypedDict):
@@ -173,8 +175,6 @@ class ReActAgentNodeLlama:
     """
 
     def __init__(self, tools, args, store=None):
-        from .prompt import REACT_AGENT_LLAMA_PROMPT
-        from .utils import ReActLlamaOutputParser
 
         output_parser = ReActLlamaOutputParser()
         prompt = PromptTemplate(
@@ -225,6 +225,15 @@ class ReActAgentNodeLlama:
         )
         response = response.content
 
+        prompt = REACT_AGENT_LLAMA_PROMPT.format(input=query, history=history, tools=tools_descriptions, thread_history=thread_history)
+        with open("rag_agent_log.json", "a") as f:
+            data = {"input": prompt}
+            json.dump(data, f)
+            f.write("\n")
+            data = {"output": response}
+            json.dump(data, f)
+            f.write("\n")
+        
         # parse tool calls or answers from raw output: result is a list
         output = self.output_parser.parse(response)
         print("@@@ Output from chain: ", output)

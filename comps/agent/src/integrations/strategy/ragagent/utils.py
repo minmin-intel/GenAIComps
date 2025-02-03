@@ -13,6 +13,10 @@ from langchain_core.output_parsers import BaseOutputParser
 class QueryWriterLlamaOutputParser(BaseOutputParser):
     def parse(self, text: str):
         print("raw output from llm: ", text)
+        with open("rag_agent_log.json", "a") as f:
+            data = {"output": text}
+            json.dump(data, f)
+            f.write("\n")
         json_lines = text.split("\n")
         output = []
         for line in json_lines:

@@ -11,18 +11,29 @@ import requests
 from integrations.utils import get_args
 
 
+def get_test_data(args):
+    filename = os.path.join(args.filedir, args.filename)
+    if filename.endswith(".jsonl"):
+        df = pd.read_json(filename, lines=True, convert_dates=False)
+    elif filename.endswith(".csv"):
+        df = pd.read_csv(filename)
+    return df
+
 def test_agent_local(args):
     from integrations.agent import instantiate_agent
 
-    df = pd.read_csv(os.path.join(args.filedir, args.filename))
-    # df = df.head(1)
+    df = get_test_data(args)
+    # df = df.sample(2)
 
     agent = instantiate_agent(args)
     config = {"recursion_limit": args.recursion_limit}
 
     response = []
     for _, row in df.iterrows():
-        resp = run_agent(agent, config, row["Query"])
+        try:
+            resp = run_agent(agent, config, row["Query"])
+        except:
+            resp = run_agent(agent, config, row["query"])
         response.append(resp)
         print("-" * 50)
 

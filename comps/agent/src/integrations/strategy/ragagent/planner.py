@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from typing import Annotated, Literal, Sequence, TypedDict
+import json
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.prompts import PromptTemplate
@@ -197,6 +198,12 @@ class QueryWriterLlama:
         history = assemble_history(messages)
         feedback = instruction
 
+        prompt = QueryWriterLlamaPrompt.format(question=question, history=history, feedback=feedback)
+        with open("rag_agent_log.json", "a") as f:
+            data = {"input": prompt}
+            json.dump(data, f)
+            f.write("\n")
+
         response = self.chain.invoke({"question": question, "history": history, "feedback": feedback})
         print("Response from query writer llm: ", response)
 
@@ -246,6 +253,12 @@ class DocumentGrader:
 
         scored_result = self.chain.invoke({"question": question, "context": docs})
 
+        prompt = DOC_GRADER_PROMPT.format(context=docs, question=question)
+        with open("rag_agent_log.json", "a") as f:
+            data = {"input": prompt}
+            json.dump(data, f)
+            f.write("\n")
+
         score = scored_result.content
         print("@@@@ Score: ", score)
 
@@ -289,4 +302,11 @@ class TextGenerator:
         response = self.rag_chain.invoke({"context": docs, "question": question, "time": query_time})
         print("@@@@ Used this doc for generation:\n", docs)
         print("@@@@ Generated response: ", response)
+
+        prompt = RAG_PROMPT.format(context=docs, question=question)
+        with open("rag_agent_log.json", "a") as f:
+            data = {"input": prompt}
+            json.dump(data, f)
+            f.write("\n")
+            
         return {"messages": [response], "output": response}
