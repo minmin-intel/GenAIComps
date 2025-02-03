@@ -84,7 +84,24 @@ class AgentNodeLlama:
             history=history,
         )
 
+        print("@@@@ Prompt: ", prompt)
+        with open("sql_agent_log.json", "a") as f:
+            data = {
+                "input": prompt
+            }
+            json.dump(data, f)
+            f.write("\n")
+        
         output = self.chain.invoke(prompt)
+
+        print("@@@@ LLM output:\n", output)   
+        with open("sql_agent_log.json", "a") as f:
+            data = {
+                "output": output.content
+            }
+            json.dump(data, f)
+            f.write("\n")
+
         output = self.output_parser.parse(
             output.content, history, table_schema, hints, question, state["messages"]
         )  # text: str, history: str, db_schema: str, hint: str

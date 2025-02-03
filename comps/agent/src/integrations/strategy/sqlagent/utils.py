@@ -16,8 +16,22 @@ def parse_answer_with_llm(text, history, chat_model):
             history = "The agent execution history is empty."
 
         prompt = ANSWER_PARSER_PROMPT.format(output=text, history=history)
+        print("@@@ Answer parser prompt: ", prompt)
+        with open("sql_agent_log.json", "a") as f:
+            data = {
+                "input": prompt
+            }
+            json.dump(data, f)
+            f.write("\n")
+
         response = chat_model.invoke(prompt).content
         print("@@@ Answer parser response: ", response)
+        with open("sql_agent_log.json", "a") as f:
+            data = {
+                "output": response
+            }
+            json.dump(data, f)
+            f.write("\n")
 
         temp = response[:5]
         if "yes" in temp.lower():
@@ -109,8 +123,23 @@ def parse_and_fix_sql_query_v2(text, chat_model, db_schema, hint, question, mess
                 DATABASE_SCHEMA=db_schema, HINT=hint, QUERY=chosen_query, QUESTION=question
             )
 
+        print("@@@ SQL query fixer prompt: ", prompt)
+        with open("sql_agent_log.json", "a") as f:
+            data = {
+                "input": prompt
+            }
+            json.dump(data, f)
+            f.write("\n")
+
         response = chat_model.invoke(prompt).content
         print("@@@ SQL query fixer response: ", response)
+        with open("sql_agent_log.json", "a") as f:
+            data = {
+                "output": response
+            }
+            json.dump(data, f)
+            f.write("\n")
+
         if "query is correct" in response.lower():
             return chosen_query
         else:
