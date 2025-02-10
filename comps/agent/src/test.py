@@ -14,41 +14,19 @@ from integrations.utils import get_args
 def test_agent_local(args):
     from integrations.agent import instantiate_agent
 
-    if args.q == 0:
-        df = pd.DataFrame({"query": ["What is the Intel OPEA Project?"]})
-    elif args.q == 1:
-        df = pd.DataFrame({"query": ["what is the trade volume for Microsoft today?"]})
-    elif args.q == 2:
-        df = pd.DataFrame({"query": ["what is the hometown of Year 2023 Australia open winner?"]})
-
-    agent = instantiate_agent(args, strategy=args.strategy)
-    app = agent.app
-
+    agent = instantiate_agent(args)
     config = {"recursion_limit": args.recursion_limit}
 
-    traces = []
-    success = 0
+    df = pd.read_json(os.path.join(args.filedir, args.filename), lines=True)
+
+    df = df.loc[df["doc_name"] == "3M_2018_10K"]
     for _, row in df.iterrows():
-        print("Query: ", row["query"])
-        initial_state = {"messages": [{"role": "user", "content": row["query"]}]}
-        try:
-            trace = {"query": row["query"], "trace": []}
-            for event in app.stream(initial_state, config=config):
-                trace["trace"].append(event)
-                for k, v in event.items():
-                    print("{}: {}".format(k, v))
+        input_message = row["question"]
+        print(f"Input message: {input_message}")
+        run_agent(agent, config, input_message)
 
-            traces.append(trace)
-            success += 1
-        except Exception as e:
-            print(str(e), str(traceback.format_exc()))
-            traces.append({"query": row["query"], "trace": str(e)})
 
-        print("-" * 50)
-
-    df["trace"] = traces
-    df.to_csv(os.path.join(args.filedir, args.output), index=False)
-    print(f"succeed: {success}/{len(df)}")
+    
 
 
 def test_agent_http(args):
@@ -278,6 +256,8 @@ def test_memory(args):
     # print("============== End of third turn ==============")
 
 
+    
+
 if __name__ == "__main__":
     args1, _ = get_args()
     parser = argparse.ArgumentParser()
@@ -285,7 +265,6 @@ if __name__ == "__main__":
     parser.add_argument("--local_test", action="store_true", help="Test with local mode")
     parser.add_argument("--endpoint_test", action="store_true", help="Test with endpoint mode")
     parser.add_argument("--assistants_api_test", action="store_true", help="Test with endpoint mode")
-    parser.add_argument("--q", type=int, default=0)
     parser.add_argument("--ip_addr", type=str, default="127.0.0.1", help="endpoint ip address")
     parser.add_argument("--query", type=str, default=None)
     parser.add_argument("--filedir", type=str, default="./", help="test file directory")
@@ -309,4 +288,5 @@ if __name__ == "__main__":
     # else:
     #     print("Please specify the test type")
 
-    test_memory(args)
+    # test_memory(args)
+    test_agent_local(args)

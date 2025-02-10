@@ -1,0 +1,14 @@
+search_knowledge_base:
+  description: Search knowledge base of SEC filings.
+  callable_api: doc_retrieval.py:search_knowledge_base
+  args_schema:
+    query:
+      type: str
+      description: Query should be descriptive. Specify the type of financial statement if possible.
+    company:
+      type: str
+      description: the company of interest
+    year:
+      type: str
+      description: the year of interest, can only specify one year
+  return_output: retrieved_data
