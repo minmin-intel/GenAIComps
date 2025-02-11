@@ -28,10 +28,11 @@ class ReActLlamaOutputParser(BaseOutputParser):
                     line = line.replace("assistant", "")
                 parsed_line = json.loads(line)
                 if isinstance(parsed_line, dict):
-                    print("parsed line: ", parsed_line)
+                    # print("parsed line: ", parsed_line)
                     output.append(parsed_line)
             except Exception as e:
-                print("Exception happened in output parsing: ", str(e))
+                # print("Exception happened in output parsing: ", str(e))
+                pass
         if output:
             return output
         else:

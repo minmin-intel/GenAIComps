@@ -17,10 +17,24 @@ def test_agent_local(args):
     agent = instantiate_agent(args)
     config = {"recursion_limit": args.recursion_limit}
 
-    df = pd.read_json(os.path.join(args.filedir, args.filename), lines=True)
+
+    if args.debug:
+        test_questions = [
+            # "Considering the data in the balance sheet, what is Block's (formerly known as Square) FY2016 working capital ratio? Define working capital ratio as total current assets divided by total current liabilities. Round your answer to two decimal places.",
+            # "We need to calculate a financial metric by using information only provided within the balance sheet. Please answer the following question: what is Boeing's year end FY2018 net property, plant, and equipment (in USD millions)?",
+            "What is Coca Cola's FY2021 COGS % margin? Calculate what was asked by utilizing the line items clearly shown in the income statement.",
+            "Is CVS Health a capital-intensive business based on FY2022 data?",
+            "What drove gross margin change as of FY2022 for JnJ? If gross margin is not a useful metric for a company like this, then please state that and explain why.",
+            "In 2022 Q2, which of JPM's business segments had the highest net income?",
+            "Which region had the Highest EBITDAR Contribution for MGM during FY2022?",
+        ]
+
+        df = pd.DataFrame({"question": test_questions})
+    else:
+        df = pd.read_json(os.path.join(args.filedir, args.filename), lines=True)
 
     # df = df.loc[df["doc_name"] == "3M_2018_10K"]
-    df = df.loc[df["company"] == "3M"]
+    # df = df.loc[df["company"] == "3M"]
     agent_outputs = []
     for _, row in df.iterrows():
         input_message = row["question"]
@@ -29,13 +43,19 @@ def test_agent_local(args):
         print(f"Response:\n{resp}")
         agent_outputs.append(resp)
 
-        output = {
-            "doc_name": row["doc_name"],
-            "question": row["question"],
-            "gold_answer": row["answer"],
-            "agent_response": resp,
-            "oracle_evidence": row["evidence"],
-        }
+        if args.debug:
+            output = {  
+                "question": row["question"],
+                "agent_response": resp,
+            }
+        else:
+            output = {
+                "doc_name": row["doc_name"],
+                "question": row["question"],
+                "gold_answer": row["answer"],
+                "agent_response": resp,
+                "oracle_evidence": row["evidence"],
+            }
 
         with open(args.output, "a") as f:
             f.write(json.dumps(output)+"\n")
@@ -291,7 +311,7 @@ if __name__ == "__main__":
     parser.add_argument("--filedir", type=str, default="./", help="test file directory")
     parser.add_argument("--filename", type=str, default="query.csv", help="query_list_file")
     parser.add_argument("--output", type=str, default="output.csv", help="query_list_file")
-    parser.add_argument("--ut", action="store_true", help="ut")
+    parser.add_argument("--debug", action="store_true", help="ut")
 
     args, _ = parser.parse_known_args()
 

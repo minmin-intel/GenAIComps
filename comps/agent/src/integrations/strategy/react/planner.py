@@ -209,15 +209,15 @@ class ReActAgentNodeLlama:
             history = assemble_history(messages)
             thread_history = ""
 
-        print("@@@ Turn History:\n", history)
-        print("@@@ Thread history:\n", thread_history)
+        # print("@@@ Turn History:\n", history)
+        # print("@@@ Thread history:\n", thread_history)
 
         tools_used = self.tools
         if state.get("tool_choice") is not None:
             tools_used = filter_tools(self.tools, state["tool_choice"])
 
         tools_descriptions = tool_renderer(tools_used)
-        print("@@@ Tools description: ", tools_descriptions)
+        # print("@@@ Tools description: ", tools_descriptions)
 
         # invoke chain: raw output from llm
         response = self.chain.invoke(
@@ -227,7 +227,7 @@ class ReActAgentNodeLlama:
 
         # parse tool calls or answers from raw output: result is a list
         output = self.output_parser.parse(response)
-        print("@@@ Output from chain: ", output)
+        # print("@@@ Output from chain: ", output)
 
         # convert output to tool calls
         tool_calls = []
