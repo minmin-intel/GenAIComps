@@ -4,11 +4,14 @@ search_knowledge_base:
   args_schema:
     query:
       type: str
-      description: Query should be descriptive. Specify the type of financial statement if possible.
+      description: the query to search for.
     company:
       type: str
-      description: the company of interest
+      description: the company of interest.
     year:
       type: str
-      description: the year of interest, can only specify one year
+      description: the year of interest, can only specify one year. can be an empty string.
+    quarter:
+      type: str
+      description: the quarter of interest, can only specify one quarter. can be 'Q1', 'Q2', 'Q3', 'Q4'. can be an empty string.
   return_output: retrieved_data

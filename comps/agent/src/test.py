@@ -19,11 +19,30 @@ def test_agent_local(args):
 
     df = pd.read_json(os.path.join(args.filedir, args.filename), lines=True)
 
-    df = df.loc[df["doc_name"] == "3M_2018_10K"]
+    # df = df.loc[df["doc_name"] == "3M_2018_10K"]
+    df = df.loc[df["company"] == "3M"]
+    agent_outputs = []
     for _, row in df.iterrows():
         input_message = row["question"]
-        print(f"Input message: {input_message}")
-        run_agent(agent, config, input_message)
+        print(f"Query:\n{input_message}")
+        resp = run_agent(agent, config, input_message)
+        print(f"Response:\n{resp}")
+        agent_outputs.append(resp)
+
+        output = {
+            "doc_name": row["doc_name"],
+            "question": row["question"],
+            "gold_answer": row["answer"],
+            "agent_response": resp,
+            "oracle_evidence": row["evidence"],
+        }
+
+        with open(args.output, "a") as f:
+            f.write(json.dumps(output)+"\n")
+
+    df["agent_response"] = agent_outputs
+    csv_output = args.output.replace(".json", ".csv")
+    df.to_csv(csv_output, index=False)
 
 
     
@@ -143,8 +162,10 @@ def run_agent(agent, config, input_message):
 
         last_message = s["messages"][-1]
         print("******Response: ", last_message.content)
+        return last_message.content
     except Exception as e:
         print(str(e))
+        return str(e)
 
 
 def stream_generator(agent, config, input_message):

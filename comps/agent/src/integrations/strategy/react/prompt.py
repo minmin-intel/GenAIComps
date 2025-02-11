@@ -66,8 +66,8 @@ You have access to the following tools:
 
 **Procedure:**
 1. Read the question carefully. Divide the question into sub-questions and conquer sub-questions one by one.
-2. Read the execution history if any to understand the tools that have been called and the information that has been gathered.
-3. Reason about the information gathered so far and decide if you can answer the question or if you need to call more tools.
+2. Think about what financial data is needed to answer the question and what financial statements are relevant.
+4. Read the execution history and reason about the information gathered so far and decide if you can answer the question or if you need to call more tools.
 
 **Output format:**
 You should output your thought process. Finish thinking first. Output tool calls or your answer at the end.
@@ -87,9 +87,8 @@ FINAL ANSWER: {{"answer": "your answer here"}}
 {history}
 ======= End of execution history ==========
 
-**IMPORTANT:**
-* Divide the question into sub-questions and conquer sub-questions one by one.
-* Questions may be time sensitive. Pay attention to the time when the question was asked.
+**Tips:**
+* You may need to do multi-hop calculations and call tools multiple times to get a financial metric.
 * Give concise, factual and relevant answers.
 * If you did not get the answer at first, do not give up. Reflect on the steps that you have taken and try a different way. Think out of the box. You hard work will be rewarded.
 

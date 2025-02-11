@@ -205,6 +205,7 @@ def get_search_result(searched_doc):
     """
     searched_doc: Document
     """
+    print(f"@@@ Searched result: {searched_doc.metadata['doc_name']}")
     if "table" in searched_doc.metadata:
         print(f"@@@ Searched result is a table!")
         return searched_doc.metadata["table"]
@@ -269,7 +270,7 @@ if __name__ == "__main__":
     args = get_args()
     df = get_test_data()
 
-    df = df.loc[df["company"]=="3M"]
+    # df = df.loc[df["company"]=="3M"]
     print("There are {} questions to be answered.".format(df.shape[0]))
     
     docs = df["doc_name"].unique().tolist()
@@ -283,7 +284,7 @@ if __name__ == "__main__":
     vector_store = Chroma(
         collection_name="doc_collection",
         embedding_function=embeddings,
-        persist_directory=os.path.join(DATAPATH, "test_chroma_db"),
+        persist_directory=os.path.join(DATAPATH, "all_docs_chroma_db"),
     )
 
     for doc_name, doc_path in zip(docs, doc_paths):
@@ -299,7 +300,7 @@ if __name__ == "__main__":
         company_year = doc_name.split("_")[0] + "_" + doc_name.split("_")[1]
         print("Company year: ", company_year)
         metadata = {"doc_name": doc_name, "company_year": company_year}
-        vectorstore = add_docs_to_vectorstore(full_doc, tables, metadata, embeddings)
+        vector_store = add_docs_to_vectorstore(full_doc, tables, metadata, vector_store)
         print("="*50)
 
 
