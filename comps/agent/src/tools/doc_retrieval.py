@@ -87,6 +87,11 @@ def map_company_with_llm(company):
     return mapped_company
 
 
+def get_content(searched_doc):
+    return searched_doc.metadata["chunk"]
+
+def get_table(searched_doc):
+    return searched_doc.metadata["table"]
 
 def rerank_docs(docs, top_n=3):
     doc_content = []
@@ -114,7 +119,7 @@ def get_context(query, company, year, quarter=None):
     vector_store = Chroma(
         collection_name="doc_collection",
         embedding_function=embeddings,
-        persist_directory=os.path.join(DATAPATH, "all_docs_chroma_db"),
+        persist_directory=os.path.join(DATAPATH, "test_3M"),
     )
     
     # retriever = vector_store.as_retriever(
@@ -146,7 +151,8 @@ def get_context(query, company, year, quarter=None):
 
     context = ""
     for i, doc in enumerate(docs):
-        result = get_search_result(doc)
+        # result = get_search_result(doc)
+        result = get_content(doc)
         context += f"Doc[{i+1}]:\n{result}\n"
     
     return context
@@ -173,7 +179,7 @@ def retrieve_tables_with_bm25(tables, query):
     table_content = ""
     for i, result in enumerate(results):
         table_content += f"Table {i+1}:\n{result.page_content}\n\n"
-    print(table_content)
+    # print(table_content)
     return table_content
 
 def get_tables_with_key(key):
@@ -199,18 +205,47 @@ def get_tables(query, company, year="", quarter=""):
 
     print(f"Getting tables for company: {company}, year: {year}, quarter: {quarter}")
 
-    key = f"{company}_{year}{quarter}"      
-    
-    tables = get_tables_with_key(key)
-    
-    if not tables:
-        key = f"{company}_{year}"
-        tables = get_tables_with_key(key)
+    ## dense retriever approach
+    k = 3
+    vector_store = Chroma(
+        collection_name="table_collection",
+        embedding_function=embeddings,
+        persist_directory=os.path.join(DATAPATH, "test_3M_table_store"),
+    )
 
-    if tables:
-        return retrieve_tables_with_bm25(tables, query)
+    docs = vector_store.similarity_search(query, k=k, filter={"company_year": f"{company}_{year}{quarter}"})
+
+    if not docs: # if no relevant document found, relax the filter
+        print("No relevant document found with company, year and quarter filter, only search with comany and year filter")
+        docs = vector_store.similarity_search(query, k=k, filter={"company_year": f"{company}_{year}"})
+        
+    if not docs: # if no relevant document found, relax the filter
+        print("No relevant document found with year filter, only serach with company filter.....")
+        docs = vector_store.similarity_search(query, k=k, filter={"company_year": f"{company}"})
+    
+    if not docs: # if no relevant document found, relax the filter
+        return "No relevant document found. Change your query and try again."
     else:
-        return "No tables found for the given company, year and quarter"
+        context = ""
+    for i, doc in enumerate(docs):
+        # result = get_search_result(doc)
+        result = get_table(doc)
+        context += f"Table[{i+1}]:\n{result}\n\n"
+    return context
+
+    ### BM25 approach
+    # key = f"{company}_{year}{quarter}"      
+    
+    # tables = get_tables_with_key(key)
+    
+    # if not tables:
+    #     key = f"{company}_{year}"
+    #     tables = get_tables_with_key(key)
+
+    # if tables:
+    #     return retrieve_tables_with_bm25(tables, query)
+    # else:
+    #     return "No tables found for the given company, year and quarter"
 
 
 
@@ -221,7 +256,11 @@ if __name__ == "__main__":
     # print(result)
 
     query = "revenue"
-    result = get_tables(query, "3M", "2023", "Q2")
+    result = get_tables(query, "3M", "2022", "")
+    print(result)
+    print("=================")
+    result = get_context(query, "3M", "2022", "")
+    print(result)
 
     # args = get_args()
 

@@ -211,7 +211,6 @@ def get_search_result(searched_doc):
         return searched_doc.metadata["table"]
     else:
         return searched_doc.page_content
-    
 
 from langchain.retrievers import ParentDocumentRetriever
 from langchain.storage import InMemoryStore
@@ -312,7 +311,7 @@ if __name__ == "__main__":
     args = get_args()
 
     df = get_test_data(args)
-    df = df.loc[df["doc_name"]=="3M_2022_10K"]
+    df = df.loc[df["doc_name"]=="3M_2018_10K"]
 
     print("There are {} questions to be answered.".format(df.shape[0]))
     
