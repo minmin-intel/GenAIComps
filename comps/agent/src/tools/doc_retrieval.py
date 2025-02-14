@@ -105,7 +105,7 @@ def rerank_docs(docs, top_n=3):
         reranked_docs.append(docs[idx])
     return reranked_docs[:top_n]
 
-def search_knowledge_base(query, company, year, quarter=None):
+def get_context(query, company, year, quarter=None):
     """
     Search the knowledge base for the most relevant document
     """
@@ -151,17 +151,84 @@ def search_knowledge_base(query, company, year, quarter=None):
     
     return context
 
+import json
+with open(os.path.join(DATAPATH, "table_store.json"), "r") as f:
+    table_store = f.readlines()
+
+table_store = [json.loads(ts) for ts in table_store]
+
+# print(len(table_store))
+# for ts in table_store:
+#     print(ts.keys())
+
+from langchain_community.retrievers import BM25Retriever
+def retrieve_tables_with_bm25(tables, query):
+    """
+    tables: list of tables
+    Retrieve tables with BM25
+    """
+    retriever = BM25Retriever.from_texts(tables, k=3)
+    results = retriever.invoke(query)
+
+    table_content = ""
+    for i, result in enumerate(results):
+        table_content += f"Table {i+1}:\n{result.page_content}\n\n"
+    print(table_content)
+    return table_content
+
+def get_tables_with_key(key):
+    tables = []
+    for ts in table_store:
+        if key in ts:
+            tables = ts[key]
+            break
+    return tables
+
+def get_tables(query, company, year="", quarter=""):
+    """
+    Get all tables for a company for a given year and quarter
+    tables are stored in json KV store, {company}_{year}{quarter}: table1 \n table2 \n table3
+    year: SEC filing year
+    quarter: SEC filing quarter
+    """
+    try:
+        company = COMPANY_MAPPING[company]
+    except:
+        print("Using LLM to map company name...")
+        company = map_company_with_llm(company)
+
+    print(f"Getting tables for company: {company}, year: {year}, quarter: {quarter}")
+
+    key = f"{company}_{year}{quarter}"      
+    
+    tables = get_tables_with_key(key)
+    
+    if not tables:
+        key = f"{company}_{year}"
+        tables = get_tables_with_key(key)
+
+    if tables:
+        return retrieve_tables_with_bm25(tables, query)
+    else:
+        return "No tables found for the given company, year and quarter"
+
+
+
+
 if __name__ == "__main__":
     # query = "FY2019 balance sheet"
     # result = search_knowledge_base(query, "Nike", "2019", "")
     # print(result)
 
-    args = get_args()
+    query = "revenue"
+    result = get_tables(query, "3M", "2023", "Q2")
 
-    test_cases = ["MGM Resorts International", "MGM"]
+    # args = get_args()
 
-    for tc in test_cases:
-        mapped_company = map_company_with_llm(args, tc)
-        print(f"Company: {tc}, mapped company: {mapped_company}")
+    # test_cases = ["MGM Resorts International", "MGM"]
+
+    # for tc in test_cases:
+    #     mapped_company = map_company_with_llm(args, tc)
+    #     print(f"Company: {tc}, mapped company: {mapped_company}")
 
 

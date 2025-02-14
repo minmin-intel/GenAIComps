@@ -22,6 +22,9 @@ def get_args():
     parser.add_argument("--output", type=str, default="output.jsonl")
     parser.add_argument("--ingest_option", type=str, default="docling")
     parser.add_argument("--retriever_option", type=str, default="plain")
+    parser.add_argument("--filedir", type=str, default="./", help="test file directory")
+    parser.add_argument("--filename", type=str, default="query.csv", help="query_list_file")
+    parser.add_argument("--debug", action="store_true", help="ut")
     args = parser.parse_args()
     return args
 
@@ -29,9 +32,32 @@ WORKDIR=os.getenv('WORKDIR')
 DATAPATH=os.path.join(WORKDIR, 'financebench/data/')
 PDFPATH=os.path.join(WORKDIR, 'financebench/pdfs/')
 
-def get_test_data():
-    filename = "financebench_open_source.jsonl"
-    df = pd.read_json(DATAPATH + filename, lines=True)
+# def get_test_data():
+#     filename = "financebench_open_source.jsonl"
+#     df = pd.read_json(DATAPATH + filename, lines=True)
+#     return df
+
+def get_test_data(args):
+    if args.debug:
+        test_questions = [
+            # "Considering the data in the balance sheet, what is Block's (formerly known as Square) FY2016 working capital ratio? Define working capital ratio as total current assets divided by total current liabilities. Round your answer to two decimal places.",
+            # "We need to calculate a financial metric by using information only provided within the balance sheet. Please answer the following question: what is Boeing's year end FY2018 net property, plant, and equipment (in USD millions)?",
+            "What is Coca Cola's FY2021 COGS % margin? Calculate what was asked by utilizing the line items clearly shown in the income statement.",
+            "Is CVS Health a capital-intensive business based on FY2022 data?",
+            "What drove gross margin change as of FY2022 for JnJ? If gross margin is not a useful metric for a company like this, then please state that and explain why.",
+            "In 2022 Q2, which of JPM's business segments had the highest net income?",
+            "Which region had the Highest EBITDAR Contribution for MGM during FY2022?",
+        ]
+
+        df = pd.DataFrame({"question": test_questions})
+    else:
+        filename = os.path.join(args.filedir, args.filename)
+        if filename.endswith(".csv"):
+            df = pd.read_csv(filename)
+        elif filename.endswith(".json") or filename.endswith(".jsonl"):
+            df = pd.read_json(filename, lines=True)
+        else:
+            raise ValueError(f"Unsupported file format: {filename}")
     return df
 
 def get_doc_path(doc_name):

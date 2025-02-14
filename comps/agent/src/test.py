@@ -11,13 +11,8 @@ import requests
 from integrations.utils import get_args
 
 
-def test_agent_local(args):
-    from integrations.agent import instantiate_agent
 
-    agent = instantiate_agent(args)
-    config = {"recursion_limit": args.recursion_limit}
-
-
+def get_test_data(args):
     if args.debug:
         test_questions = [
             # "Considering the data in the balance sheet, what is Block's (formerly known as Square) FY2016 working capital ratio? Define working capital ratio as total current assets divided by total current liabilities. Round your answer to two decimal places.",
@@ -31,10 +26,27 @@ def test_agent_local(args):
 
         df = pd.DataFrame({"question": test_questions})
     else:
-        df = pd.read_json(os.path.join(args.filedir, args.filename), lines=True)
+        filename = os.path.join(args.filedir, args.filename)
+        if filename.endswith(".csv"):
+            df = pd.read_csv(filename)
+        elif filename.endswith(".json") or filename.endswith(".jsonl"):
+            df = pd.read_json(filename, lines=True)
+        else:
+            raise ValueError(f"Unsupported file format: {filename}")
+    return df
 
-    # df = df.loc[df["doc_name"] == "3M_2018_10K"]
-    # df = df.loc[df["company"] == "3M"]
+
+def test_agent_local(args):
+    from integrations.agent import instantiate_agent
+
+    agent = instantiate_agent(args)
+    config = {"recursion_limit": args.recursion_limit}
+
+    df = get_test_data(args)
+    print(df.columns)
+    df = df.loc[df["company"] == "3M"]
+    # df = df.loc[df["doc_name"] != "3M_2018_10K"]
+
     agent_outputs = []
     for _, row in df.iterrows():
         input_message = row["question"]
@@ -64,8 +76,6 @@ def test_agent_local(args):
     csv_output = args.output.replace(".json", ".csv")
     df.to_csv(csv_output, index=False)
 
-
-    
 
 
 def test_agent_http(args):

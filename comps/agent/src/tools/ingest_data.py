@@ -106,8 +106,8 @@ def save_docling_output(full_doc, conv_res, output_dir):
         doc_filename = conv_res.input.file.stem
 
         # Save the table as csv
-        element_csv_filename = os.path.join(output_dir, f"{doc_filename}-table-{table_ix+1}.csv")
-        table_df.to_csv(element_csv_filename)
+        # element_csv_filename = os.path.join(output_dir, f"{doc_filename}-table-{table_ix+1}.csv")
+        # table_df.to_csv(element_csv_filename)
 
         # Save the table as markdown
         element_md_filename = os.path.join(output_dir, f"{doc_filename}-table-{table_ix+1}.md")

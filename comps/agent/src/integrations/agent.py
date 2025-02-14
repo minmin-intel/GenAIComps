@@ -27,6 +27,11 @@ def instantiate_agent(args):
         from .strategy.react import ReActAgentLlama
 
         return ReActAgentLlama(args, custom_prompt=custom_prompt)
+    elif strategy == "finqa":
+        print("Initializing FinReactLlama")
+        from .strategy.finqa_agent import FinReActAgentLlama
+
+        return FinReActAgentLlama(args, custom_prompt=custom_prompt)
     elif strategy == "plan_execute":
         from .strategy.planexec import PlanExecuteAgentWithLangGraph
 
