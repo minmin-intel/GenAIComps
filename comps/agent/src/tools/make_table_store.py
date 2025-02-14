@@ -27,8 +27,7 @@ def extract_and_save_tables_from_pdf(doc_converter, doc_name, output_path):
 if __name__ == "__main__":
     args = get_args()
     df = get_test_data(args)
-    df = df.loc[df["company"] == "3M"]
-    df = df.loc[df["doc_name"]!="3M_2018_10K"]
+    df = df.loc[df["company"] != "3M"]
     docs = df["doc_name"].unique().tolist()
     doc_converter = DocumentConverter()
     for doc in docs:

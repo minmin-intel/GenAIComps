@@ -262,46 +262,107 @@ def parent_child_retriever(doc, metadata, embeddings):
     return retriever, vectorstore
 
 
+SUMMARY_PROMPT="""\
+You are a financial analyst. You are given a document extracted from a SEC filing. Read the document and summarize it in a few sentences.
+Document:
+{doc}
+Only output your summary.
+"""
+def split_markdown_and_summarize(text):
+    splitter = MarkdownTextSplitter(chunk_size=4000, chunk_overlap=200)
+    chunks = post_process_markdown(splitter, text)
+    print(chunks[0][:50])
+    print(f"Number of chunks: {len(chunks)}")
+    output = []
+    for chunk in chunks:
+        prompt = SUMMARY_PROMPT.format(doc=chunk)
+        summary = generate_answer(args, prompt)
+        print("Summary of chunk:", summary)
+        output.append((chunk, summary))
+    return output
+
+def index_chunk_and_summary_into_chroma(vector_store, chunks, metadata):
+    """
+    chunks: list of tuples (chunk, summary)
+    metadata: dict
+    """
+    
+    docs_to_add = []
+    for chunk in chunks:
+        doc = Document(
+            page_content=chunk[1], # summary
+            metadata={"chunk": chunk[0], **metadata},
+        )
+        docs_to_add.append(doc)
+    
+    uuids = [str(uuid4()) for _ in range(len(chunks))]
+    print("Adding chunks to vector store........")
+    t0 = time.time()
+    vector_store.add_documents(documents=docs_to_add, ids=uuids)
+    t1 = time.time()
+    print(f"Time taken to add {len(chunks)} chunks: {t1-t0}")
+    return vector_store
+
+
 WORKDIR=os.getenv('WORKDIR')
 DATAPATH=os.path.join(WORKDIR, 'datasets/financebench/dataprep/')
     
 ############## extract and ingest PDFs ###################
 if __name__ == "__main__":
     args = get_args()
-    df = get_test_data()
 
-    # df = df.loc[df["company"]=="3M"]
+    df = get_test_data(args)
+    df = df.loc[df["doc_name"]=="3M_2022_10K"]
+
     print("There are {} questions to be answered.".format(df.shape[0]))
     
     docs = df["doc_name"].unique().tolist()
     doc_paths = [get_doc_path(doc) for doc in docs]
     print(f"There are {len(doc_paths)} unique documents to be processed.")
 
-    doc_converter = DocumentConverter()
+    if not args.read_processed:
+        doc_converter = DocumentConverter()
+
     model = "BAAI/bge-base-en-v1.5"
     embeddings = HuggingFaceEmbeddings(model_name=model)
 
     vector_store = Chroma(
         collection_name="doc_collection",
         embedding_function=embeddings,
-        persist_directory=os.path.join(DATAPATH, "all_docs_chroma_db"),
+        persist_directory=os.path.join(DATAPATH, args.db_name),
     )
 
     for doc_name, doc_path in zip(docs, doc_paths):
-        print("Processing document with docling: ", doc_name)
-        full_doc, conv_res=process_pdf_docling(doc_converter, doc_path)
-        print("PDF extraction completed for ", doc_name)
+        if args.read_processed:
+            doc_filepath = os.path.join(DATAPATH, doc_name+".md")
+            with open(doc_filepath, "r") as f:
+                full_doc = f.read()
+                print(f"Length of {doc_name}: {len(full_doc)}")
+        else:
+            print("Processing document with docling: ", doc_name)
+            full_doc, conv_res=process_pdf_docling(doc_converter, doc_path)
+            print("PDF extraction completed for ", doc_name)
 
-        print("Processing tables........")
-        tables = process_tables(conv_res, args)
-        print("Table processing completed for ", doc_name)
-
-        print("Indexing into vector store........")
         company_year = doc_name.split("_")[0] + "_" + doc_name.split("_")[1]
         print("Company year: ", company_year)
         metadata = {"doc_name": doc_name, "company_year": company_year}
-        vector_store = add_docs_to_vectorstore(full_doc, tables, metadata, vector_store)
-        print("="*50)
+        
+        if args.chunk_option == "chunk_summarize":
+            print("Chunking and summarizing document........")
+            chunks = split_markdown_and_summarize(full_doc)
+            print("Chunking and summarizing completed for ", doc_name)
+            print("Indexing into vector store........")
+            vector_store = index_chunk_and_summary_into_chroma(vector_store, chunks, metadata)
+            print("="*50)
+        elif args.chunk_option == "text_table":
+            print("Processing tables........")
+            tables = process_tables(conv_res, args)
+            print("Table processing completed for ", doc_name)
+            print("Indexing into vector store........")            
+            vector_store = add_docs_to_vectorstore(full_doc, tables, metadata, vector_store)
+            print("="*50)
+        else:
+            raise ValueError("Invalid chunk option. Please choose either 'chunk_summarize' or 'text_table'.")
 
 
 

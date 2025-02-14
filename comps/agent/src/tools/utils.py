@@ -22,9 +22,12 @@ def get_args():
     parser.add_argument("--output", type=str, default="output.jsonl")
     parser.add_argument("--ingest_option", type=str, default="docling")
     parser.add_argument("--retriever_option", type=str, default="plain")
+    parser.add_argument("--chunk_option", type=str, default="chunk_summarize", help="chunk_summarize, text_table")
     parser.add_argument("--filedir", type=str, default="./", help="test file directory")
     parser.add_argument("--filename", type=str, default="query.csv", help="query_list_file")
+    parser.add_argument("--db_name", type=str, help="name of vector db")
     parser.add_argument("--debug", action="store_true", help="ut")
+    parser.add_argument("--read_processed", action="store_true", help="read processed data")
     args = parser.parse_args()
     return args
 
