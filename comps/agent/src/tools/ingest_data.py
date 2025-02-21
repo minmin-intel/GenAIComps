@@ -303,6 +303,70 @@ def index_chunk_and_summary_into_chroma(vector_store, chunks, metadata):
     return vector_store
 
 
+METADATA_PROMPT="""\
+Read the following document and extract the following metadata:
+- Company name
+- Year
+- Quarter: can be empty
+- Document type
+
+Output in json format. Examples: 
+```json
+{{"company": "Apple", "year": "2020", "quarter": "", "doc_type": "10-K"}}
+```
+```json
+{{"company": "Apple", "year": "2022", "quarter": "Q1", "doc_type": "10-Q"}}
+```
+```json
+{{"company": "Apple", "year": "2024", "quarter": "Q4", "doc_type": "earnings call transcript"}}
+```
+
+Here is the document:
+{document}
+
+Only output the metadata in json format. Now start!
+"""
+
+def parse_metadata_json(metadata):
+    """
+    metadata: str
+    """
+    if "```json" in metadata:
+        metadata = metadata.split("```json")[1]
+        metadata = metadata.split("```")[0]
+    metadata = metadata.strip()
+    try:
+        metadata = json.loads(metadata)
+        return metadata
+    except:
+        print("Error in parsing metadata.")
+        return {}
+
+from transformers import AutoTokenizer
+def generate_metadata_with_llm(args, full_doc):
+    tokenizer = AutoTokenizer.from_pretrained(args.model)
+    # get the first 5000 characters
+    prompt = METADATA_PROMPT.format(document=full_doc[:5000])
+    metadata = generate_answer(args, prompt)
+    print(metadata)
+    metadata = parse_metadata_json(metadata)
+
+    title = f"{metadata['company']} {metadata['year']} {metadata['quarter']} {metadata['doc_type']}"
+    company_year_quarter = f"{metadata['company']}_{metadata['year']}_{metadata['quarter']}"
+    metadata["doc_title"] = title
+    metadata["company_year_quarter"] = company_year_quarter
+    metadata["doc_length"] = len(tokenizer.encode(full_doc))
+
+    for k, v in metadata.items():
+        if isinstance(v, str):
+            metadata[k] = v.upper()
+
+    for k, v in metadata.items():   
+        print(f"{k}: {v}")
+
+    return metadata
+
+
 WORKDIR=os.getenv('WORKDIR')
 DATAPATH=os.path.join(WORKDIR, 'datasets/financebench/dataprep/')
     
@@ -311,7 +375,10 @@ if __name__ == "__main__":
     args = get_args()
 
     df = get_test_data(args)
-    df = df.loc[df["doc_name"]=="3M_2018_10K"]
+    df = df.sample(2)
+    # df = df.loc[df["doc_name"]=="3M_2018_10K"]
+    # df = df.loc[df["company"] != "3M"]
+    # df = df.loc[df["doc_name"]=="WALMART_2020_10K"]
 
     print("There are {} questions to be answered.".format(df.shape[0]))
     
@@ -331,6 +398,9 @@ if __name__ == "__main__":
         persist_directory=os.path.join(DATAPATH, args.db_name),
     )
 
+
+    company_list = []
+
     for doc_name, doc_path in zip(docs, doc_paths):
         if args.read_processed:
             doc_filepath = os.path.join(DATAPATH, doc_name+".md")
@@ -341,27 +411,44 @@ if __name__ == "__main__":
             print("Processing document with docling: ", doc_name)
             full_doc, conv_res=process_pdf_docling(doc_converter, doc_path)
             print("PDF extraction completed for ", doc_name)
+            print("Saving document to markdown........")
+            with open(os.path.join(DATAPATH, doc_name+".md"), "w") as f:
+                f.write(full_doc)
 
-        company_year = doc_name.split("_")[0] + "_" + doc_name.split("_")[1]
-        print("Company year: ", company_year)
-        metadata = {"doc_name": doc_name, "company_year": company_year}
-        
-        if args.chunk_option == "chunk_summarize":
-            print("Chunking and summarizing document........")
-            chunks = split_markdown_and_summarize(full_doc)
-            print("Chunking and summarizing completed for ", doc_name)
-            print("Indexing into vector store........")
-            vector_store = index_chunk_and_summary_into_chroma(vector_store, chunks, metadata)
-            print("="*50)
-        elif args.chunk_option == "text_table":
-            print("Processing tables........")
-            tables = process_tables(conv_res, args)
-            print("Table processing completed for ", doc_name)
-            print("Indexing into vector store........")            
-            vector_store = add_docs_to_vectorstore(full_doc, tables, metadata, vector_store)
-            print("="*50)
+        if args.generate_metadata:
+            print("Generating metadata........")
+            metadata = generate_metadata_with_llm(args, full_doc)
+            company = metadata["company"]
+            if company not in company_list:
+                company_list.append(company)
+
+            print("Metadata generated for ", doc_name)
         else:
-            raise ValueError("Invalid chunk option. Please choose either 'chunk_summarize' or 'text_table'.")
+            company_year = doc_name.split("_")[0] + "_" + doc_name.split("_")[1]
+            print("Company year: ", company_year)
+            metadata = {"doc_name": doc_name, "company_year": company_year}
+        
+        # save company list
+        with open(os.path.join(DATAPATH, "company_list.txt"), "w") as f:
+            for company in company_list:
+                f.write(company + "\n")
+
+        # if args.chunk_option == "chunk_summarize":
+        #     print("Chunking and summarizing document........")
+        #     chunks = split_markdown_and_summarize(full_doc)
+        #     print("Chunking and summarizing completed for ", doc_name)
+        #     print("Indexing into vector store........")
+        #     vector_store = index_chunk_and_summary_into_chroma(vector_store, chunks, metadata)
+        #     print("="*50)
+        # elif args.chunk_option == "text_table":
+        #     print("Processing tables........")
+        #     tables = process_tables(conv_res, args)
+        #     print("Table processing completed for ", doc_name)
+        #     print("Indexing into vector store........")            
+        #     vector_store = add_docs_to_vectorstore(full_doc, tables, metadata, vector_store)
+        #     print("="*50)
+        # else:
+        #     raise ValueError("Invalid chunk option. Please choose either 'chunk_summarize' or 'text_table'.")
 
 
 

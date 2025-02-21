@@ -10,8 +10,8 @@ You have access to the following two tools:
 {tools}
 
 **Procedure:**
-1. Read the question carefully. Decide whether you need look at financial statements or text in financial documents to find the information needed.
-2. If you need to look at financial statements, call the get_tables tool. If you need to look at text, call the get_context tool.
+1. Read the question carefully. Decide whether you need to look at financial statements or read text in financial documents to find the information needed.
+2. If you need to look at financial statements, call the get_tables tool. If you need to read text, call the get_context tool.
 4. If there is execution history, read it carefully and reason about the information gathered so far and decide if you can answer the question or if you need to call more tools.
 
 **Output format:**

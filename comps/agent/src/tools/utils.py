@@ -12,7 +12,7 @@ import requests
 """
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--llm_endpoint_url", type=str, default="http://localhost:8085")
+    parser.add_argument("--llm_endpoint_url", type=str, default="http://localhost:8086")
     parser.add_argument("--agent_url", type=str, default="http://localhost:9095/v1/chat/completions")
     parser.add_argument("--model", type=str, default="meta-llama/Llama-3.3-70B-Instruct")
     parser.add_argument("--max_new_tokens", type=int, default=1024)
@@ -30,6 +30,7 @@ def get_args():
     parser.add_argument("--db_name", type=str, help="name of vector db")
     parser.add_argument("--debug", action="store_true", help="ut")
     parser.add_argument("--read_processed", action="store_true", help="read processed data")
+    parser.add_argument("--generate_metadata", action="store_true", help="generate metadata with LLM")
     args = parser.parse_args()
     return args
 
