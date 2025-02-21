@@ -48,7 +48,7 @@ def get_tables_from_store(company_year_quarter):
 if __name__ == "__main__":
     args = get_args()
     df = get_test_data(args)
-    df = df.loc[df["doc_name"] == "3M_2018_10K"]
+    df = df.loc[df["company"] != "3M"]
     docs = df["doc_name"].unique().tolist()
     print(docs)
     # doc_converter = DocumentConverter()

@@ -305,7 +305,7 @@ def index_chunk_and_summary_into_chroma(vector_store, chunks, metadata):
 
 METADATA_PROMPT="""\
 Read the following document and extract the following metadata:
-- Company name
+- Company name: only the name of the company, do not include Company, Inc., Corp., etc.
 - Year
 - Quarter: can be empty
 - Document type
@@ -398,9 +398,6 @@ if __name__ == "__main__":
         persist_directory=os.path.join(DATAPATH, args.db_name),
     )
 
-
-    company_list = []
-
     for doc_name, doc_path in zip(docs, doc_paths):
         if args.read_processed:
             doc_filepath = os.path.join(DATAPATH, doc_name+".md")
@@ -419,20 +416,12 @@ if __name__ == "__main__":
             print("Generating metadata........")
             metadata = generate_metadata_with_llm(args, full_doc)
             company = metadata["company"]
-            if company not in company_list:
-                company_list.append(company)
-
             print("Metadata generated for ", doc_name)
         else:
             company_year = doc_name.split("_")[0] + "_" + doc_name.split("_")[1]
             print("Company year: ", company_year)
             metadata = {"doc_name": doc_name, "company_year": company_year}
         
-        # save company list
-        with open(os.path.join(DATAPATH, "company_list.txt"), "w") as f:
-            for company in company_list:
-                f.write(company + "\n")
-
         # if args.chunk_option == "chunk_summarize":
         #     print("Chunking and summarizing document........")
         #     chunks = split_markdown_and_summarize(full_doc)

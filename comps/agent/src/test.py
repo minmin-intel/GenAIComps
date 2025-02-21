@@ -43,10 +43,10 @@ def test_agent_local(args):
     config = {"recursion_limit": args.recursion_limit}
 
     df = get_test_data(args)
-    print(df.columns)
+    # print(df.columns)
     # df = df.loc[df["company"] == "3M"]
     # df = df.loc[df["doc_name"] != "3M_2018_10K"]
-    df = df.loc[df["doc_name"]=="3M_2022_10K"]
+    # df = df.loc[df["doc_name"]=="3M_2022_10K"]
 
     agent_outputs = []
     for _, row in df.iterrows():

@@ -28,9 +28,11 @@ def get_args():
     parser.add_argument("--filedir", type=str, default="./", help="test file directory")
     parser.add_argument("--filename", type=str, default="query.csv", help="query_list_file")
     parser.add_argument("--db_name", type=str, help="name of vector db")
+    parser.add_argument("--db_collection", type=str, help="name of collection")
     parser.add_argument("--debug", action="store_true", help="ut")
     parser.add_argument("--read_processed", action="store_true", help="read processed data")
     parser.add_argument("--generate_metadata", action="store_true", help="generate metadata with LLM")
+    parser.add_argument("--update_metadata", action="store_true", help="update metadata of docs in vector db")
     args = parser.parse_args()
     return args
 
