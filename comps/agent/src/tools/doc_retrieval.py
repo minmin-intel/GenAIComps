@@ -54,9 +54,7 @@ Here is the list of company names in the knowledge base:
 
 This is the company of interest: {company}
 
-Map the company of interest to the company name in the knowledge base. Only output the company name.
-
-Your answer:
+Map the company of interest to the company name in the knowledge base. Output the company name in  {{}}. Example: {{3M}}
 """
 # def get_company_list():
 #     df = pd.read_json(os.path.join(WORKDIR, "financebench/data/financebench_open_source.jsonl"), lines=True)
@@ -64,6 +62,16 @@ Your answer:
 #     return company_list
 
 # COMPANY_LIST = get_company_list()
+
+def parse_company_name(response):
+    # response {3M}
+    try:
+        company = response.split("{")[1].split("}")[0]
+    except:
+        company = ""
+    return company
+
+
 
 def map_company_with_llm(company):
     prompt = PROMPT_TEMPLATE.format(company_list=COMPANY_LIST, company=company)
@@ -82,7 +90,8 @@ def map_company_with_llm(company):
 
     # get response
     response = completion.choices[0].message.content
-    mapped_company = response #COMPANY_MAPPING[response]
+    print("Response: ", response)
+    mapped_company = parse_company_name(response) #COMPANY_MAPPING[response]
     print("Mapped company: ", mapped_company)
     return mapped_company
 
@@ -126,7 +135,7 @@ def get_context(query, company, year, quarter=None):
     # except:
     #     print("Using LLM to map company name...")
     #     company = map_company_with_llm(company)
-
+    company = company.upper()
     if company in COMPANY_LIST:
         print(f"Company {company} found in the list")
     else:
@@ -137,12 +146,12 @@ def get_context(query, company, year, quarter=None):
 
     docs = vector_store.similarity_search(query, k=k, filter={"company_year_quarter": f"{company}_{year}_{quarter}"})
 
-    # if not docs: # if no relevant document found, relax the filter
-    #     print("No relevant document found with company, year and quarter filter, only search with comany and year filter")
-    #     docs = vector_store.similarity_search(query, k=k, filter={"company_year": f"{company}_{year}"})
+    if not docs: # if no relevant document found, relax the filter
+        print("No relevant document found with company, year and quarter filter, only search with comany and year")
+        docs = vector_store.similarity_search(query, k=k, filter={"company_year_quarter": f"{company}_{year}_"})
         
     if not docs: # if no relevant document found, relax the filter
-        print("No relevant document found with company_year_quarter filter, only serach with company filter.....")
+        print("No relevant document found with company_year filter, only serach with company.....")
         docs = vector_store.similarity_search(query, k=k, filter={"company": f"{company}"})
     
     if not docs: # if no relevant document found, relax the filter
@@ -211,7 +220,7 @@ def get_tables(query, company, year="", quarter=""):
     # except:
     #     print("Using LLM to map company name...")
     #     company = map_company_with_llm(company)
-
+    company = company.upper()
     if company in COMPANY_LIST:
         print(f"Company {company} found in the list")
     else:
@@ -222,7 +231,7 @@ def get_tables(query, company, year="", quarter=""):
     print(f"Getting tables for company: {company}, year: {year}, quarter: {quarter}")
 
     ## dense retriever approach
-    k = 3
+    k = 1
     vector_store = Chroma(
         collection_name="table_collection",
         embedding_function=embeddings,
@@ -231,23 +240,23 @@ def get_tables(query, company, year="", quarter=""):
 
     docs = vector_store.similarity_search(query, k=k, filter={"company_year_quarter": f"{company}_{year}_{quarter}"})
 
-    # if not docs: # if no relevant document found, relax the filter
-    #     print("No relevant document found with company, year and quarter filter, only search with comany and year filter")
-    #     docs = vector_store.similarity_search(query, k=k, filter={"company_year": f"{company}_{year}"})
+    if not docs: # if no relevant document found, relax the filter
+        print("No relevant document found with company, year and quarter filter, only search with comany and year filter")
+        docs = vector_store.similarity_search(query, k=k, filter={"company_year_quarter": f"{company}_{year}_"})
         
     if not docs: # if no relevant document found, relax the filter
-        print("No relevant document found with company_year_quarter filter, only serach with company filter.....")
+        print("No relevant document found with company_year filter, only serach with company filter.....")
         docs = vector_store.similarity_search(query, k=k, filter={"company": f"{company}"})
     
     if not docs: # if no relevant document found, relax the filter
         return "No relevant document found. Change your query and try again."
     else:
         context = ""
-    for i, doc in enumerate(docs):
-        # result = get_search_result(doc)
-        result = get_table(doc)
-        context += f"Table[{i+1}]:\n{result}\n\n"
-    return context
+        for i, doc in enumerate(docs):
+            # result = get_search_result(doc)
+            result = get_table(doc)
+            context += f"Table[{i+1}]:\n{result}\n\n"
+        return context
 
     ### BM25 approach
     # key = f"{company}_{year}{quarter}"      
@@ -271,9 +280,19 @@ if __name__ == "__main__":
     # result = search_knowledge_base(query, "Nike", "2019", "")
     # print(result)
 
-    query = "cash flow statement"
-    result = get_tables(query, "3M", "2018", "")
-    print(result)
+    # test_cases = ["Block", "AMD"]
+    # for tc in test_cases:
+    #     company = map_company_with_llm(tc)
+
+    query = "major acquisitions"
+    company = "AMCOR"
+    year = ["2023", "2022", "2021"]
+    for y in year:
+        result = get_context(query, company, y, "")
+        print(result)
+        print("=================")
+    # result = get_tables(query, company, "2016", "")
+    # print(result)
     # print("=================")
     # result = get_context(query, "3M", "2023", "Q2")
     # print(result)

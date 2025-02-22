@@ -10,9 +10,8 @@ You have access to the following two tools:
 {tools}
 
 **Procedure:**
-1. Read the question carefully. Decide whether you need to look at financial statements or read text in financial documents to find the information needed.
-2. If you need to look at financial statements, call the get_tables tool. If you need to read text, call the get_context tool.
-4. If there is execution history, read it carefully and reason about the information gathered so far and decide if you can answer the question or if you need to call more tools.
+1. Read the question carefully. Divide the question into sub-questions and conquer sub-questions one by one.
+2. If there is execution history, read it carefully and reason about the information gathered so far and decide if you can answer the question or if you need to call more tools.
 
 **Output format:**
 You should output your thought process. Finish thinking first. Output tool calls or your answer at the end.
@@ -33,8 +32,9 @@ FINAL ANSWER: {{"answer": "your answer here"}}
 
 **Tips:**
 * You may need to do multi-hop calculations and call tools multiple times to get an answer.
-* Give concise, factual and relevant answers.
+* Do not assume any financial figures. Always rely on the tools to get the factual information.
 * If you did not get the answer at first, do not give up. Reflect on the steps that you have taken and try a different way. Think out of the box. You hard work will be rewarded.
+* Give concise, factual and relevant answers.
 
 Now take a deep breath and think step by step to answer user's question in this turn.
 USER MESSAGE: {input}

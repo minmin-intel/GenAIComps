@@ -17,20 +17,20 @@ get_context:
   return_output: retrieved_data
 
 # get_tables(company, year="", quarter="")
-get_tables:
-  description: Get tables from SEC filings.
-  callable_api: doc_retrieval.py:get_tables
-  args_schema:
-    query:
-      type: str
-      description: the query to search for.
-    company:
-      type: str
-      description: the company of interest.
-    year:
-      type: str
-      description: the year of interest, can only specify one year.
-    quarter:
-      type: str
-      description: the quarter of interest, can only specify one quarter. can be 'Q1', 'Q2', 'Q3', 'Q4'. can be an empty string.
-  return_output: retrieved_data
+# get_tables:
+#   description: Get tables from SEC filings.
+#   callable_api: doc_retrieval.py:get_tables
+#   args_schema:
+#     query:
+#       type: str
+#       description: the query to search for.
+#     company:
+#       type: str
+#       description: the company of interest.
+#     year:
+#       type: str
+#       description: the year of interest, can only specify one year.
+#     quarter:
+#       type: str
+#       description: the quarter of interest, can only specify one quarter. can be 'Q1', 'Q2', 'Q3', 'Q4'. can be an empty string.
+#   return_output: retrieved_data
