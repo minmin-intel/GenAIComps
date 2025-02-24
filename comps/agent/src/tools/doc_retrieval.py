@@ -124,11 +124,11 @@ def get_context(query, company, year, quarter=None):
     Search the knowledge base for the most relevant document
     """
     k = 3
-    top_n = 3
+    top_n = 2
     vector_store = Chroma(
         collection_name="doc_collection",
         embedding_function=embeddings,
-        persist_directory=os.path.join(DATAPATH, "test_3M_section_summary_v3"),
+        persist_directory=os.path.join(DATAPATH, "test_3M_section_summary"),
     )
     # try:
     #     company = COMPANY_MAPPING[company]
@@ -158,7 +158,7 @@ def get_context(query, company, year, quarter=None):
         return "No relevant document found. Change your query and try again."
 
     # rerank docs
-    # docs = rerank_docs(docs, top_n=top_n)
+    #docs = rerank_docs(docs, top_n=top_n)
 
     context = ""
     for i, doc in enumerate(docs):
@@ -276,21 +276,23 @@ def get_tables(query, company, year="", quarter=""):
 
 
 if __name__ == "__main__":
-    # query = "FY2019 balance sheet"
-    # result = search_knowledge_base(query, "Nike", "2019", "")
-    # print(result)
+    query = "debt securities traded on national exchanges"
+    result = get_tables(query, "3M", "2023", "Q2")
+    print("="*50)
+    result = get_context(query, "3M", "2023", "Q2")
+    print(result)
 
     # test_cases = ["Block", "AMD"]
     # for tc in test_cases:
     #     company = map_company_with_llm(tc)
 
-    query = "major acquisitions"
-    company = "AMCOR"
-    year = ["2023", "2022", "2021"]
-    for y in year:
-        result = get_context(query, company, y, "")
-        print(result)
-        print("=================")
+    #query = "major acquisitions"
+    #company = "AMCOR"
+    #year = ["2023", "2022", "2021"]
+    #for y in year:
+    #    result = get_context(query, company, y, "")
+    #    print(result)
+    #    print("=================")
     # result = get_tables(query, company, "2016", "")
     # print(result)
     # print("=================")

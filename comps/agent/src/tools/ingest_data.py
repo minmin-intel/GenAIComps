@@ -501,10 +501,10 @@ if __name__ == "__main__":
         
         if args.chunk_option == "chunk_summarize":
             print("Chunking and summarizing document........")
-            chunks = split_markdown_and_summarize(full_doc)
+            #chunks = split_markdown_and_summarize(full_doc)
             print("Chunking and summarizing completed for ", doc_name)
             print("Indexing into vector store........")
-            vector_store_text = index_chunk_and_summary_into_chroma(vector_store, chunks, metadata)
+            #vector_store_text = index_chunk_and_summary_into_chroma(vector_store_text, chunks, metadata)
             print("Processing tablee....")
             tables_summaries = summarize_all_tables(tables, args)
             print("Indexing into table vector store........")
