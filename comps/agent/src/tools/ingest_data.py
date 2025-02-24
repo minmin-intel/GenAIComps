@@ -13,6 +13,7 @@ import json
 #from docling.document_converter import DocumentConverter
 import pandas as pd
 import os
+from tqdm import tqdm
 
 import glob
 import random
@@ -80,6 +81,13 @@ def get_table_summary_with_llm(table_md, args):
     table_summary = generate_answer(args, prompt)
     print(f"Table summary:\n{table_summary}")
     return table_summary
+
+def summarize_all_tables(tables, args):
+    output = []
+    for table_md in tqdm(tables, desc="Summarizing tables"):
+        table_summary = get_table_summary_with_llm(table_md, args)
+        output.append((table_md, table_summary))
+    return output
 
 def process_tables(conv_res, args):
     table_outputs = []
@@ -304,10 +312,10 @@ def split_markdown_and_summarize(text):
     print("Minimum chunk size: ", min([len(chunk) for chunk in chunks]))
 
     output = []
-    for chunk in chunks:
+    for chunk in tqdm(chunks):
         print("Chunk:\n", chunk[:50])
         print("Length of chunk: ", len(chunk))
-        if len(chunk) < 100:
+        if len(chunk) < 500:
             print("Chunk is too short. Skipping summarization.")
             output.append((chunk, chunk))
             continue
@@ -407,16 +415,34 @@ def generate_metadata_with_llm(args, full_doc):
     return metadata
 
 
-WORKDIR=os.getenv('WORKDIR')
-DATAPATH=os.path.join(WORKDIR, 'datasets/financebench/financebench_data/dataprep/')
+def get_tables_from_store(doc_name):
+    with open(TABLESTORE, "r") as f:
+        table_store = f.readlines()
     
+    table_store = [json.loads(ts) for ts in table_store]
+    tables = []
+
+    comapny = doc_name.split("_")[0]
+    year_quarter = doc_name.split("_")[1]
+    company_year_quarter = f"{comapny}_{year_quarter}"
+    for ts in table_store:
+        if company_year_quarter in ts:
+            tables = ts[company_year_quarter]
+            break
+    print(f"Found {len(tables)} tables for {doc_name}")
+    return tables
+
+WORKDIR=os.getenv('WORKDIR')
+DATAPATH=os.path.join(WORKDIR, 'datasets/financebench_data/dataprep/')
+TABLESTORE=os.path.join(DATAPATH, "table_store.json")
+
 ############## extract and ingest PDFs ###################
 if __name__ == "__main__":
     args = get_args()
 
     df = get_test_data(args)
     #df = df.sample(2)
-    df = df.loc[df["doc_name"]!="3M_2018_10K"]
+    df = df.loc[df["doc_name"]!="3M_2023Q2_10Q"]
     df = df.loc[df["company"] == "3M"]
     # df = df.loc[df["doc_name"]=="WALMART_2020_10K"]
 
@@ -432,18 +458,28 @@ if __name__ == "__main__":
     model = "BAAI/bge-base-en-v1.5"
     embeddings = HuggingFaceEmbeddings(model_name=model)
 
-    vector_store = Chroma(
+    vector_store_text = Chroma(
         collection_name="doc_collection",
+        embedding_function=embeddings,
+        persist_directory=os.path.join(DATAPATH, args.db_name),
+    )
+
+    vector_store_table = Chroma(
+        collection_name="table_collection",
         embedding_function=embeddings,
         persist_directory=os.path.join(DATAPATH, args.db_name),
     )
 
     for doc_name, doc_path in zip(docs, doc_paths):
         if args.read_processed:
+            # read full doc
             doc_filepath = os.path.join(DATAPATH, doc_name+".md")
             with open(doc_filepath, "r") as f:
                 full_doc = f.read()
                 print(f"Length of {doc_name}: {len(full_doc)}")
+            # read tables
+            tables = get_tables_from_store(doc_name)
+            
         else:
             print("Processing document with docling: ", doc_name)
             full_doc, conv_res=process_pdf_docling(doc_converter, doc_path)
@@ -468,7 +504,11 @@ if __name__ == "__main__":
             chunks = split_markdown_and_summarize(full_doc)
             print("Chunking and summarizing completed for ", doc_name)
             print("Indexing into vector store........")
-            vector_store = index_chunk_and_summary_into_chroma(vector_store, chunks, metadata)
+            vector_store_text = index_chunk_and_summary_into_chroma(vector_store, chunks, metadata)
+            print("Processing tablee....")
+            tables_summaries = summarize_all_tables(tables, args)
+            print("Indexing into table vector store........")
+            vector_store_table = index_tables_into_chroma(vector_store_table, tables_summaries, metadata)
             print("="*50)
         elif args.chunk_option == "text_table":
             print("Processing tables........")

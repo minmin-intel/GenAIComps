@@ -128,7 +128,7 @@ def get_context(query, company, year, quarter=None):
     vector_store = Chroma(
         collection_name="doc_collection",
         embedding_function=embeddings,
-        persist_directory=os.path.join(DATAPATH, "test_3M_section_summary"),
+        persist_directory=os.path.join(DATAPATH, "test_3M_section_summary_v3"),
     )
     # try:
     #     company = COMPANY_MAPPING[company]
@@ -235,7 +235,7 @@ def get_tables(query, company, year="", quarter=""):
     vector_store = Chroma(
         collection_name="table_collection",
         embedding_function=embeddings,
-        persist_directory=os.path.join(DATAPATH, "test_3M_table_store"),
+        persist_directory=os.path.join(DATAPATH, "test_3M_section_summary_v3"),
     )
 
     docs = vector_store.similarity_search(query, k=k, filter={"company_year_quarter": f"{company}_{year}_{quarter}"})

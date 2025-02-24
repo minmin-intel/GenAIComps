@@ -1,4 +1,4 @@
-db_name="test_3M_section_summary"
+db_name="test_3M_section_summary_v3"
 filedir=$WORKDIR/financebench/data/ #$WORKDIR/datasets/financebench/ #
 filename=financebench_open_source.jsonl #difficult_questions.csv #
 
