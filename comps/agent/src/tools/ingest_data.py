@@ -10,7 +10,7 @@ except:
 import requests
 import time
 import json
-from docling.document_converter import DocumentConverter
+#from docling.document_converter import DocumentConverter
 import pandas as pd
 import os
 
@@ -404,16 +404,16 @@ def generate_metadata_with_llm(args, full_doc):
 
 
 WORKDIR=os.getenv('WORKDIR')
-DATAPATH=os.path.join(WORKDIR, 'datasets/financebench/dataprep/')
+DATAPATH=os.path.join(WORKDIR, 'datasets/financebench_data/dataprep/')
     
 ############## extract and ingest PDFs ###################
 if __name__ == "__main__":
     args = get_args()
 
     df = get_test_data(args)
-    df = df.sample(2)
-    # df = df.loc[df["doc_name"]=="3M_2018_10K"]
-    # df = df.loc[df["company"] != "3M"]
+    #df = df.sample(2)
+    df = df.loc[df["doc_name"]!="3M_2018_10K"]
+    df = df.loc[df["company"] == "3M"]
     # df = df.loc[df["doc_name"]=="WALMART_2020_10K"]
 
     print("There are {} questions to be answered.".format(df.shape[0]))
@@ -452,6 +452,7 @@ if __name__ == "__main__":
             print("Generating metadata........")
             metadata = generate_metadata_with_llm(args, full_doc)
             company = metadata["company"]
+            print(f"Metadata for {doc_name}: {metadata}")
             print("Metadata generated for ", doc_name)
         else:
             company_year = doc_name.split("_")[0] + "_" + doc_name.split("_")[1]

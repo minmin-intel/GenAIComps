@@ -20,7 +20,7 @@ from openai import OpenAI
 
 
 WORKDIR=os.getenv('WORKDIR')
-DATAPATH=os.path.join(WORKDIR, 'datasets/financebench/dataprep/')
+DATAPATH=os.path.join(WORKDIR, 'datasets/financebench_data/dataprep/')
 
 model = "BAAI/bge-base-en-v1.5"
 embeddings = HuggingFaceEmbeddings(model_name=model)
@@ -128,7 +128,7 @@ def get_context(query, company, year, quarter=None):
     vector_store = Chroma(
         collection_name="doc_collection",
         embedding_function=embeddings,
-        persist_directory=os.path.join(DATAPATH, "test_3M"),
+        persist_directory=os.path.join(DATAPATH, "test_3M_section_summary"),
     )
     # try:
     #     company = COMPANY_MAPPING[company]
