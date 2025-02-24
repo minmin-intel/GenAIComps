@@ -278,6 +278,7 @@ Only output your summary.
 
 SUMMARY_PROMPT="""\
 You are a financial analyst. You are given a section extracted from financial document. Read the section and give it a descriptive title.
+If there is a table in the section, decide what financial statement the table is, for example, balance sheet, income statement, cash flow statement, or statement of shareholders' equity. You should specify the type of financial statement in the title.
 Section:
 {doc}
 Only output the title.
@@ -299,6 +300,9 @@ def split_markdown_and_summarize_v1(text):
 def split_markdown_and_summarize(text):
     chunks = post_process_markdown(text)
     print(f"Number of chunks: {len(chunks)}")
+    print("Average chunk size: ", sum([len(chunk) for chunk in chunks]) / len(chunks))
+    print("Minimum chunk size: ", min([len(chunk) for chunk in chunks]))
+
     output = []
     for chunk in chunks:
         print("Chunk:\n", chunk[:50])
@@ -404,7 +408,7 @@ def generate_metadata_with_llm(args, full_doc):
 
 
 WORKDIR=os.getenv('WORKDIR')
-DATAPATH=os.path.join(WORKDIR, 'datasets/financebench_data/dataprep/')
+DATAPATH=os.path.join(WORKDIR, 'datasets/financebench/financebench_data/dataprep/')
     
 ############## extract and ingest PDFs ###################
 if __name__ == "__main__":
