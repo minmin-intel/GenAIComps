@@ -119,10 +119,18 @@ def save_docling_output(full_doc, conv_res, output_dir):
 
 from langchain_text_splitters import MarkdownTextSplitter
 import os
-def post_process_markdown(spliter: MarkdownTextSplitter, text: str) -> list:
+def post_process_markdown_v1(spliter: MarkdownTextSplitter, text: str) -> list:
     text = text.replace("## Table of Contents", "")
     text = text.replace("Table of Contents", "")
     return spliter.split_text(text)
+
+
+def post_process_markdown(text: str) -> list:
+    text = text.replace("## Table of Contents", "")
+    text = text.replace("Table of Contents", "")
+    # split by "##"
+    chunks = text.split("##")
+    return chunks
 
 from langchain_core.documents import Document
 from uuid import uuid4
@@ -261,24 +269,52 @@ def parent_child_retriever(doc, metadata, embeddings):
     return retriever, vectorstore
 
 
-SUMMARY_PROMPT="""\
+SUMMARY_PROMPT_v1="""\
 You are a financial analyst. You are given a document extracted from a SEC filing. Read the document and summarize it in a few sentences.
 Document:
 {doc}
 Only output your summary.
 """
-def split_markdown_and_summarize(text):
+
+SUMMARY_PROMPT="""\
+You are a financial analyst. You are given a section extracted from financial document. Read the section and give it a descriptive title.
+Section:
+{doc}
+Only output the title.
+"""
+
+def split_markdown_and_summarize_v1(text):
     splitter = MarkdownTextSplitter(chunk_size=4000, chunk_overlap=200)
     chunks = post_process_markdown(splitter, text)
     print(chunks[0][:50])
     print(f"Number of chunks: {len(chunks)}")
     output = []
     for chunk in chunks:
-        prompt = SUMMARY_PROMPT.format(doc=chunk)
+        prompt = SUMMARY_PROMPT_v1.format(doc=chunk)
         summary = generate_answer(args, prompt)
         print("Summary of chunk:", summary)
         output.append((chunk, summary))
     return output
+
+def split_markdown_and_summarize(text):
+    chunks = post_process_markdown(text)
+    print(f"Number of chunks: {len(chunks)}")
+    output = []
+    for chunk in chunks:
+        print("Chunk:\n", chunk[:50])
+        print("Length of chunk: ", len(chunk))
+        if len(chunk) < 100:
+            print("Chunk is too short. Skipping summarization.")
+            output.append((chunk, chunk))
+            continue
+        print("Summarizing chunk........")
+        prompt = SUMMARY_PROMPT.format(doc=chunk)
+        summary = generate_answer(args, prompt)
+        print("Summary of chunk:\n", summary)
+        output.append((chunk, summary))
+        print("="*50)
+    return output
+
 
 def index_chunk_and_summary_into_chroma(vector_store, chunks, metadata):
     """
@@ -422,22 +458,22 @@ if __name__ == "__main__":
             print("Company year: ", company_year)
             metadata = {"doc_name": doc_name, "company_year": company_year}
         
-        # if args.chunk_option == "chunk_summarize":
-        #     print("Chunking and summarizing document........")
-        #     chunks = split_markdown_and_summarize(full_doc)
-        #     print("Chunking and summarizing completed for ", doc_name)
-        #     print("Indexing into vector store........")
-        #     vector_store = index_chunk_and_summary_into_chroma(vector_store, chunks, metadata)
-        #     print("="*50)
-        # elif args.chunk_option == "text_table":
-        #     print("Processing tables........")
-        #     tables = process_tables(conv_res, args)
-        #     print("Table processing completed for ", doc_name)
-        #     print("Indexing into vector store........")            
-        #     vector_store = add_docs_to_vectorstore(full_doc, tables, metadata, vector_store)
-        #     print("="*50)
-        # else:
-        #     raise ValueError("Invalid chunk option. Please choose either 'chunk_summarize' or 'text_table'.")
+        if args.chunk_option == "chunk_summarize":
+            print("Chunking and summarizing document........")
+            chunks = split_markdown_and_summarize(full_doc)
+            print("Chunking and summarizing completed for ", doc_name)
+            print("Indexing into vector store........")
+            vector_store = index_chunk_and_summary_into_chroma(vector_store, chunks, metadata)
+            print("="*50)
+        elif args.chunk_option == "text_table":
+            print("Processing tables........")
+            tables = process_tables(conv_res, args)
+            print("Table processing completed for ", doc_name)
+            print("Indexing into vector store........")            
+            vector_store = add_docs_to_vectorstore(full_doc, tables, metadata, vector_store)
+            print("="*50)
+        else:
+            raise ValueError("Invalid chunk option. Please choose either 'chunk_summarize' or 'text_table'.")
 
 
 
