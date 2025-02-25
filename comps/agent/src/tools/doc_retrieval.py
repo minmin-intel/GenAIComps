@@ -156,56 +156,75 @@ from langchain_core.documents import Document
 def convert_docs(docs, doc_type="chunk"):
     text = []
     for doc in docs:
+        # doc_title = doc.metadata["doc_title"]
         if doc_type=="chunk":
-            converted = Document(
-                page_content=f"from {doc.metadata["doc_title"]}:\n{doc.metadata["chunk"]}",
-                metadata={"doc_title": doc.metadata["doc_title"]}
-            )
-            text.append(converted)
+            content = doc.metadata["chunk"]
         elif doc_type=="table":
-            converted = Document(
-                page_content=f"from {doc.metadata["doc_title"]}:\n{doc.metadata["table"]}",
-                metadata={"doc_title": doc.metadata["doc_title"]}
-            )
-            text.append(converted)
+            content = doc.metadata["table"]
         else:
-            converted = Document(
-                page_content=f"from {doc.metadata["doc_title"]}:\n{doc.page_content}",
-                metadata={"doc_title": doc.metadata["doc_title"]}
+            content = doc.page_content
+        
+        converted = Document(
+                page_content=content,
+                metadata=doc.metadata
             )
-            text.append(converted)
+        text.append(converted)
+
     return text
 
 
-def hybrid_search(query, docs, vector_store, doc_type="chunk"):
-    k = 10
+def bm25_search(query, company, vector_store, k=10, doc_type="chunk"):
+    metadata = ("company",f"{company}")
+    docs = get_docs_matching_metadata(metadata, vector_store)
 
-    # BM25 search over content
-    docs_text = convert_docs(docs, doc_type=doc_type)
-    retriever = BM25Retriever.from_documents(docs_text, k=k)
-    docs_bm25 = retriever.invoke(query)
-    print(f"Number of docs found with BM25 over content: {len(results)}")
+    if docs:
+        # BM25 search over content
+        docs_text = convert_docs(docs, doc_type=doc_type)
+        retriever = BM25Retriever.from_documents(docs_text, k=k)
+        docs_bm25 = retriever.invoke(query)
+        print(f"Number of docs found with BM25 over content: {len(docs_bm25)}")
 
-    # BM25 search over summary/title
-    docs = convert_docs(docs, doc_type="general")
-    retriever = BM25Retriever.from_documents(docs, k=k)
-    docs_bm25_title = retriever.invoke("query")
-    print(f"Number of docs found with BM25 over title: {len(docs_bm25_title)}")
+        # BM25 search over summary/title
+        retriever = BM25Retriever.from_documents(docs, k=k)
+        docs_bm25_title = retriever.invoke(query)
+        print(f"Number of docs found with BM25 over title: {len(docs_bm25_title)}")
+        results = docs_bm25 + docs_bm25_title
+    else:
+        results = []
+    return results
+
+def hybrid_search(query, comapny, vector_store, k=10, doc_type="chunks"):
+    # bm25 search
+    chunks_bm25 = bm25_search(query, comapny, vector_store, k=k, doc_type=doc_type)
+    print(f"Number of docs found with BM25 search: {len(chunks_bm25)}")
 
     # similarity search over summary/title
-    docs_sim = similarity_search(vector_store, k, query, company, year, quarter)
-    print(f"Number of docs found with similarity search: {len(docs_sim)}")
-    results = docs_bm25 + docs_bm25_title+ docs_sim
+    chunks_sim = similarity_search(vector_store, k, query, company, "", "")
+    print(f"Number of docs found with similarity search: {len(chunks_sim)}")
+    chunks = chunks_bm25 + chunks_sim
+    print(f"Total number of chunks found: {len(chunks)}")
+    return chunks
 
-    return results
 
 def get_unique_docs(docs):
     results = []
+    context = ""
+    i = 1
     for doc in docs:
-        content = doc.page_content
+        if "chunk" in doc.metadata:
+            content = doc.metadata["chunk"]
+        elif "table" in doc.metadata:
+            content = doc.metadata["table"]
+        else:
+            content = doc.page_content
         if content not in results:
             results.append(content)
-    return results
+            doc_title = doc.metadata["doc_title"]
+            ret_doc = f"Doc [{i}] from {doc_title}:\n{content}\n"
+            context += ret_doc
+            i += 1
+    print(f"Number of unique docs found: {len(results)}")
+    return context
 
 
 def get_context_bm25_llm(query, company):
@@ -214,8 +233,6 @@ def get_context_bm25_llm(query, company):
         embedding_function=embeddings,
         persist_directory=os.path.join(DATAPATH, "test_cocacola_v7"),
     )
-    
-
     # metadata = ("company_year_quarter",f"{company}_{year}_{quarter}")
     # docs = get_docs_matching_metadata(metadata, all_docs)
     # if not docs:
@@ -224,14 +241,9 @@ def get_context_bm25_llm(query, company):
     # if not docs:
 
     # get text chunks for the company
-    metadata = ("company",f"{company}")
-    docs = get_docs_matching_metadata(metadata, vector_store)
+    k = 2
+    chunks = hybrid_search(query, company, vector_store, k, doc_type="chunk")
     
-    if docs:
-        print(f"Number of docs found matching metadata: {len(docs)}")
-        chunks = hybrid_search(query, docs, vector_store, doc_type="chunk")
-        print(f"Total number of chunks found: {len(chunks)}")
-
     # tables
     vector_store_table = Chroma(
         collection_name="table_collection",
@@ -240,23 +252,12 @@ def get_context_bm25_llm(query, company):
     )
 
     # get tables matching metadata
-    metadata = ("company",f"{company}")
-    tables = get_docs_matching_metadata(metadata, vector_store_table)
-    if tables:
-        print(f"Number of tables found matching metadata: {len(tables)}")
-        tables = hybrid_search(query, tables, vector_store_table, doc_type="table")
-        print(f"Total number of tables found: {len(tables)}")
+    tables = hybrid_search(query, company, vector_store_table, k, doc_type="table")
 
     # get unique results
-    results = get_unique_docs(chunks + tables)
-    print(f"Number of unique docs found: {len(results)}")
+    context = get_unique_docs(chunks + tables)
+    print("Context:\n", context)
 
-    # use LLM to judge if there is any useful information
-    context = ""
-    for i, doc in enumerate(results):
-        # result = get_content(doc)
-        context += f"Doc[{i+1}]{doc}\n"
-    
     # prompt = DOC_GRADER_PROMPT.format(query=query, documents=context)
     prompt = ANSWER_PROMPT.format(query=query, documents=context)
     response = generate_answer_with_llm(prompt)
@@ -437,9 +438,9 @@ if __name__ == "__main__":
         print(result)
         print("="*50)
 
-        query = "key agenda of 8K filing"
-        result = get_context_bm25_llm(query, "AMCOR")
-        print(result)
+        # query = "key agenda of 8K filing"
+        # result = get_context_bm25_llm(query, "AMCOR")
+        # print(result)
     else:
         WORKDIR=os.getenv('WORKDIR')
         filename = os.path.join(WORKDIR, "financebench/data/financebench_open_source.jsonl")
