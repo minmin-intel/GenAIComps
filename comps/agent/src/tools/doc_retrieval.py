@@ -112,13 +112,13 @@ def rerank_docs(docs, top_n=3):
 
 def get_docs_matching_metadata(metadata, docs):
     """
-    metadata: {"company_year": "3M_2023"}
+    metadata: ("company_year", "3M_2023")
     docs: list of documents
     """
     print(f"Searching for docs with metadata: {metadata}")
     matching_docs = []
-    key = metadata.keys()[0]
-    value = metadata[key]
+    key = metadata[0]
+    value = metadata[1]
 
     for doc in docs:
         if doc.metadata[key] == value:
@@ -137,6 +137,13 @@ If yes, output the useful information in {{}}. Include financial figures when av
 If no, output "No relevant information found."
 """
 
+def convert_docs_to_text(docs):
+    # doc content is saved in metadata["chunk"]
+    text = []
+    for doc in docs:
+        text.append(doc.metadata["chunk"])
+    return text
+
 def get_context_bm25_llm(query, company, year, quarter=None):
     vector_store = Chroma(
         collection_name="doc_collection",
@@ -147,13 +154,13 @@ def get_context_bm25_llm(query, company, year, quarter=None):
     id_list = collection['ids']
     all_docs = vector_store.get_by_ids(id_list)
 
-    metadata = {"company_year_quarter":f"{company}_{year}_{quarter}"}
+    metadata = ("company_year_quarter",f"{company}_{year}_{quarter}")
     docs = get_docs_matching_metadata(metadata, all_docs)
     if not docs:
-        metadata = {"company_year":f"{company}_{year}"}
+        metadata = ("company_year",f"{company}_{year}")
         docs = get_docs_matching_metadata(metadata, all_docs)
     if not docs:
-        metadata = {"company":f"{company}"}
+        metadata = ("company",f"{company}")
         docs = get_docs_matching_metadata(metadata, all_docs)
     
     if not docs:
@@ -161,10 +168,20 @@ def get_context_bm25_llm(query, company, year, quarter=None):
     
     print(f"Number of docs found matching metadata: {len(docs)}")
     # use BM25 to narrow down
+    docs_text = convert_docs_to_text(docs)
     k = 10
-    retriever = BM25Retriever.from_documents(docs, k=k)
+    retriever = BM25Retriever.from_texts(docs_text, k=k)
     results = retriever.invoke(query)
     print(f"Number of docs found with BM25: {len(results)}")
+
+    # similarity search
+    docs_sim = similarity_search(vector_store, k, query, company, year, quarter)
+    docs_sim_text = convert_docs_to_text(docs_sim)
+    results = results + docs_sim_text
+
+    # get unique results
+    results = list(set(results))
+    print(f"Number of unique docs found: {len(results)}")
 
     # use LLM to judge if there is any useful information
     context = ""
@@ -177,6 +194,21 @@ def get_context_bm25_llm(query, company, year, quarter=None):
     print("Doc grader LLM response: ", response)
     return response
 
+def similarity_search(vector_store, k, query, company, year, quarter=None):
+    docs = vector_store.similarity_search(query, k=k, filter={"company_year_quarter": f"{company}_{year}_{quarter}"})
+
+    if not docs: # if no relevant document found, relax the filter
+        print("No relevant document found with company, year and quarter filter, only search with comany and year")
+        docs = vector_store.similarity_search(query, k=k, filter={"company_year": f"{company}_{year}"})
+        
+    if not docs: # if no relevant document found, relax the filter
+        print("No relevant document found with company_year filter, only serach with company.....")
+        docs = vector_store.similarity_search(query, k=k, filter={"company": f"{company}"})
+    
+    if not docs:
+        return None
+    else:
+        return docs
 
 
 def get_context(query, company, year, quarter=None):
@@ -200,15 +232,7 @@ def get_context(query, company, year, quarter=None):
 
     print(f"Searcing for company: {company}, year: {year}, quarter: {quarter}")
 
-    docs = vector_store.similarity_search(query, k=k, filter={"company_year_quarter": f"{company}_{year}_{quarter}"})
-
-    if not docs: # if no relevant document found, relax the filter
-        print("No relevant document found with company, year and quarter filter, only search with comany and year")
-        docs = vector_store.similarity_search(query, k=k, filter={"company_year": f"{company}_{year}"})
-        
-    if not docs: # if no relevant document found, relax the filter
-        print("No relevant document found with company_year filter, only serach with company.....")
-        docs = vector_store.similarity_search(query, k=k, filter={"company": f"{company}"})
+    docs = similarity_search(vector_store, k, query, company, year, quarter)
     
     if not docs: # if no relevant document found, relax the filter
         return "No relevant document found. Change your query and try again."
@@ -333,9 +357,14 @@ def get_tables(query, company, year="", quarter=""):
 
 if __name__ == "__main__":
     query = "debt securities traded on national exchanges"
-    result = get_tables(query, "3M", "2023", "Q2")
+    # result = get_tables(query, "3M", "2023", "Q2")
+    # print("="*50)
+    result = get_context_bm25_llm(query, "3M", "2023", "Q2")
+    print(result)
     print("="*50)
-    result = get_context(query, "3M", "2023", "Q2")
+
+    query = "key agenda of 8K filing"
+    result = get_context_bm25_llm(query, "AMCOR", "2022", "Q2")
     print(result)
 
     # test_cases = ["Block", "AMD"]
