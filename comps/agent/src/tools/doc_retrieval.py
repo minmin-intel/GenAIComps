@@ -172,12 +172,13 @@ def get_context_bm25_llm(query, company, year, quarter=None):
     k = 10
     retriever = BM25Retriever.from_texts(docs_text, k=k)
     results = retriever.invoke(query)
+    docs_bm25 = convert_docs_to_text(results)
     print(f"Number of docs found with BM25: {len(results)}")
 
     # similarity search
     docs_sim = similarity_search(vector_store, k, query, company, year, quarter)
     docs_sim_text = convert_docs_to_text(docs_sim)
-    results = results + docs_sim_text
+    results = docs_bm25 + docs_sim_text
 
     # get unique results
     results = list(set(results))
@@ -186,8 +187,8 @@ def get_context_bm25_llm(query, company, year, quarter=None):
     # use LLM to judge if there is any useful information
     context = ""
     for i, doc in enumerate(results):
-        result = get_content(doc)
-        context += f"Doc[{i+1}]:\n{result}\n"
+        # result = get_content(doc)
+        context += f"Doc[{i+1}]:\n{doc}\n"
     
     prompt = DOC_GRADER_PROMPT.format(query=query, documents=context)
     response = generate_answer_with_llm(prompt)
