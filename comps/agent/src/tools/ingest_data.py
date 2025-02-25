@@ -64,7 +64,7 @@ def get_context_of_table(table_md, full_doc):
 
 TABLE_SUMMARY_PROMPT = """\
 You are a financial analyst. You are given a table extracted from a SEC filing. Read the table and give it a descriptive title. 
-If the table is a financial statement, for example, balance sheet, income statement, cash flow statement, or statement of shareholders' equity, you should specify the type of financial statement in the title.
+If the table is a financial statement, for example, balance sheet, income statement, cash flow statement, statement of operations, or statement of shareholders' equity, you should specify the type of financial statement in the title.
 
 Table:
 
@@ -320,7 +320,7 @@ def split_markdown_and_summarize(text):
             output.append((chunk, chunk))
             continue
         print("Summarizing chunk........")
-        prompt = SUMMARY_PROMPT.format(doc=chunk)
+        prompt = SUMMARY_PROMPT_v1.format(doc=chunk)
         summary = generate_answer(args, prompt)
         print("Summary of chunk:\n", summary)
         output.append((chunk, summary))
