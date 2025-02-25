@@ -482,7 +482,7 @@ def get_tables_from_store(doc_name):
 WORKDIR=os.getenv('WORKDIR')
 DATAPATH=os.path.join(WORKDIR, 'datasets/financebench_data/dataprep/')
 TABLESTORE=os.path.join(DATAPATH, "table_store.json")
-COMPANY_LIST=os.path.join(WORKDIR, 'datasets/financebench_data/new_company_list.txt')
+COMPANY_LIST=os.path.join(DATAPATH, 'new_company_list.txt')
 
 ############## extract and ingest PDFs ###################
 if __name__ == "__main__":
@@ -491,7 +491,7 @@ if __name__ == "__main__":
     df = get_test_data(args)
     #df = df.sample(2)
     # df = df.loc[df["doc_name"]!="3M_2023Q2_10Q"]
-    df = df.loc[df["company"] == "Coca-Cola"]
+    df = df.loc[df["company"] != "Coca-Cola"]
     # df = df.loc[df["doc_name"]=="WALMART_2020_10K"]
 
     print("There are {} questions to be answered.".format(df.shape[0]))
@@ -519,11 +519,14 @@ if __name__ == "__main__":
     )
 
     if os.path.exists(COMPANY_LIST):
+        print("Company list exists, reading the list...")
         with open(COMPANY_LIST, "r") as f:
             company_list = f.readlines()
         company_list = [c.strip().upper() for c in company_list]
     else:
         company_list = []
+        with open(COMPANY_LIST, "w") as f:
+            f.write("")
 
     for doc_name, doc_path in zip(docs, doc_paths):
         if args.read_processed:

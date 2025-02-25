@@ -203,7 +203,7 @@ def get_tables_with_key(key):
 
 
 def get_company_list():
-    with open(os.path.join(DATAPATH, "company_list.txt"), "r") as f:
+    with open(os.path.join(DATAPATH, "new_company_list.txt"), "r") as f:
         company_list = f.readlines()
     company_list = [c.strip() for c in company_list]
     print("Number of companies: ", len(company_list))
