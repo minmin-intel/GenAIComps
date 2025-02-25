@@ -96,7 +96,7 @@ class ReActAgentNodeLlama:
             history = assemble_history(messages)
             thread_history = ""
 
-        # print("@@@ Turn History:\n", history)
+        print("@@@ Turn History:\n", history)
         # print("@@@ Thread history:\n", thread_history)
 
         tools_used = self.tools
