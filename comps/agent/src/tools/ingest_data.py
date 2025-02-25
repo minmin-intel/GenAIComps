@@ -315,7 +315,7 @@ def split_markdown_and_summarize(text):
     for chunk in tqdm(chunks):
         print("Chunk:\n", chunk[:50])
         print("Length of chunk: ", len(chunk))
-        if len(chunk) < 500:
+        if len(chunk) < 100:
             print("Chunk is too short. Skipping summarization.")
             output.append((chunk, chunk))
             continue
@@ -391,6 +391,43 @@ def parse_metadata_json(metadata):
         return {}
 
 from transformers import AutoTokenizer
+CHECK_COMPANY="""\
+Here is the list of company names in the knowledge base:
+{company_list}
+
+This is the company of interest: {company}
+
+Think carefully if the company of interest is one of the companies already in the knowledge base. 
+If yes, map the company of interest to the company name in the knowledge base and output the mapped name.
+If not, output the company of interest as is.
+
+Output the company name in {{}}. Example: {{3M}}
+
+Now start!
+"""
+
+def parse_company_name(response):
+    # response {3M}
+    try:
+        company = response.split("{")[1].split("}")[0]
+    except:
+        company = ""
+    return company
+
+def check_company_in_company_list(company, company_list):
+    if company in company_list:
+        print(f"{company} is already in the company list.")
+        return company
+    else:
+        # use LLM to map company to a company in the list
+        print(f"Check if {company} can be mapped to the company list.")
+        prompt = CHECK_COMPANY.format(company_list="\n".join(company_list), company=company)
+        response = generate_answer(args, prompt)
+        parsed = parse_company_name(response)
+        print(f"Mapped {company} to {parsed}")
+        return parsed
+
+
 def generate_metadata_with_llm(args, full_doc):
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     # get the first 5000 characters
@@ -399,15 +436,25 @@ def generate_metadata_with_llm(args, full_doc):
     print(metadata)
     metadata = parse_metadata_json(metadata)
 
-    title = f"{metadata['company']} {metadata['year']} {metadata['quarter']} {metadata['doc_type']}"
-    company_year_quarter = f"{metadata['company']}_{metadata['year']}_{metadata['quarter']}"
-    metadata["doc_title"] = title
-    metadata["company_year_quarter"] = company_year_quarter
-    metadata["doc_length"] = len(tokenizer.encode(full_doc))
-
+    # convert to upper case
     for k, v in metadata.items():
         if isinstance(v, str):
             metadata[k] = v.upper()
+
+    # check if company is already in company list
+    with open(COMPANY_LIST, "r") as f:
+        company_list = f.readlines()
+    company_list = [c.strip().upper() for c in company_list]
+    company = check_company_in_company_list(metadata["company"].upper(), company_list)
+    metadata["company"] = company.upper()
+
+    title = f"{metadata['company']} {metadata['year']} {metadata['quarter']} {metadata['doc_type']}"
+    company_year_quarter = f"{metadata['company']}_{metadata['year']}_{metadata['quarter']}"
+    company_year = f"{metadata['company']}_{metadata['year']}"
+    metadata["doc_title"] = title
+    metadata["company_year_quarter"] = company_year_quarter
+    metadata["company_year"] = company_year
+    metadata["doc_length"] = len(tokenizer.encode(full_doc))
 
     for k, v in metadata.items():   
         print(f"{k}: {v}")
@@ -435,6 +482,7 @@ def get_tables_from_store(doc_name):
 WORKDIR=os.getenv('WORKDIR')
 DATAPATH=os.path.join(WORKDIR, 'datasets/financebench_data/dataprep/')
 TABLESTORE=os.path.join(DATAPATH, "table_store.json")
+COMPANY_LIST=os.path.join(WORKDIR, 'datasets/financebench_data/new_company_list.txt')
 
 ############## extract and ingest PDFs ###################
 if __name__ == "__main__":
@@ -442,8 +490,8 @@ if __name__ == "__main__":
 
     df = get_test_data(args)
     #df = df.sample(2)
-    df = df.loc[df["doc_name"]!="3M_2023Q2_10Q"]
-    df = df.loc[df["company"] == "3M"]
+    # df = df.loc[df["doc_name"]!="3M_2023Q2_10Q"]
+    df = df.loc[df["company"] == "Coca-Cola"]
     # df = df.loc[df["doc_name"]=="WALMART_2020_10K"]
 
     print("There are {} questions to be answered.".format(df.shape[0]))
@@ -470,6 +518,13 @@ if __name__ == "__main__":
         persist_directory=os.path.join(DATAPATH, args.db_name),
     )
 
+    if os.path.exists(COMPANY_LIST):
+        with open(COMPANY_LIST, "r") as f:
+            company_list = f.readlines()
+        company_list = [c.strip().upper() for c in company_list]
+    else:
+        company_list = []
+
     for doc_name, doc_path in zip(docs, doc_paths):
         if args.read_processed:
             # read full doc
@@ -492,6 +547,11 @@ if __name__ == "__main__":
             print("Generating metadata........")
             metadata = generate_metadata_with_llm(args, full_doc)
             company = metadata["company"]
+            if company not in company_list:
+                company_list.append(company.upper())
+                with open(COMPANY_LIST, "a") as f:
+                    f.write(company.upper())
+                    f.write("\n")
             print(f"Metadata for {doc_name}: {metadata}")
             print("Metadata generated for ", doc_name)
         else:
@@ -501,10 +561,10 @@ if __name__ == "__main__":
         
         if args.chunk_option == "chunk_summarize":
             print("Chunking and summarizing document........")
-            #chunks = split_markdown_and_summarize(full_doc)
+            chunks = split_markdown_and_summarize(full_doc)
             print("Chunking and summarizing completed for ", doc_name)
             print("Indexing into vector store........")
-            #vector_store_text = index_chunk_and_summary_into_chroma(vector_store_text, chunks, metadata)
+            vector_store_text = index_chunk_and_summary_into_chroma(vector_store_text, chunks, metadata)
             print("Processing tablee....")
             tables_summaries = summarize_all_tables(tables, args)
             print("Indexing into table vector store........")

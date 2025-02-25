@@ -128,7 +128,7 @@ def get_context(query, company, year, quarter=None):
     vector_store = Chroma(
         collection_name="doc_collection",
         embedding_function=embeddings,
-        persist_directory=os.path.join(DATAPATH, "test_3M_section_summary"),
+        persist_directory=os.path.join(DATAPATH, "test_cocacola_v7"),
     )
     # try:
     #     company = COMPANY_MAPPING[company]
@@ -148,7 +148,7 @@ def get_context(query, company, year, quarter=None):
 
     if not docs: # if no relevant document found, relax the filter
         print("No relevant document found with company, year and quarter filter, only search with comany and year")
-        docs = vector_store.similarity_search(query, k=k, filter={"company_year_quarter": f"{company}_{year}_"})
+        docs = vector_store.similarity_search(query, k=k, filter={"company_year": f"{company}_{year}"})
         
     if not docs: # if no relevant document found, relax the filter
         print("No relevant document found with company_year filter, only serach with company.....")
@@ -235,14 +235,14 @@ def get_tables(query, company, year="", quarter=""):
     vector_store = Chroma(
         collection_name="table_collection",
         embedding_function=embeddings,
-        persist_directory=os.path.join(DATAPATH, "test_3M_section_summary_v3"),
+        persist_directory=os.path.join(DATAPATH, "test_cocacola_v7"),
     )
 
     docs = vector_store.similarity_search(query, k=k, filter={"company_year_quarter": f"{company}_{year}_{quarter}"})
 
     if not docs: # if no relevant document found, relax the filter
         print("No relevant document found with company, year and quarter filter, only search with comany and year filter")
-        docs = vector_store.similarity_search(query, k=k, filter={"company_year_quarter": f"{company}_{year}_"})
+        docs = vector_store.similarity_search(query, k=k, filter={"company_year": f"{company}_{year}"})
         
     if not docs: # if no relevant document found, relax the filter
         print("No relevant document found with company_year filter, only serach with company filter.....")
