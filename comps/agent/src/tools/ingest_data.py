@@ -524,6 +524,8 @@ if __name__ == "__main__":
         company_list = [c.strip().upper() for c in company_list]
     else:
         company_list = []
+        with open(COMPANY_LIST, "w") as f:
+            f.write("")
 
     for doc_name, doc_path in zip(docs, doc_paths):
         if args.read_processed:

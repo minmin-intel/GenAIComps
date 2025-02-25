@@ -41,12 +41,6 @@ def get_company_mapping():
     return company_mapping
 
 COMPANY_MAPPING = get_company_mapping()
-# COMPANY_MAPPING["Coca Cola"] = "COCACOLA"
-# COMPANY_MAPPING["The Coca-Cola Company"] = "COCACOLA"
-# COMPANY_MAPPING["AES"] = "AES"
-# COMPANY_MAPPING["The AES Corporation"] = "AES"
-# COMPANY_MAPPING["Apple Inc."] = "APPLE"
-# COMPANY_MAPPING["Block (formerly Square)"] = "BLOCK"
 
 PROMPT_TEMPLATE="""\
 Here is the list of company names in the knowledge base:
@@ -56,12 +50,6 @@ This is the company of interest: {company}
 
 Map the company of interest to the company name in the knowledge base. Output the company name in  {{}}. Example: {{3M}}
 """
-# def get_company_list():
-#     df = pd.read_json(os.path.join(WORKDIR, "financebench/data/financebench_open_source.jsonl"), lines=True)
-#     company_list = df["company"].unique().tolist()
-#     return company_list
-
-# COMPANY_LIST = get_company_list()
 
 def parse_company_name(response):
     # response {3M}
@@ -71,10 +59,7 @@ def parse_company_name(response):
         company = ""
     return company
 
-
-
-def map_company_with_llm(company):
-    prompt = PROMPT_TEMPLATE.format(company_list=COMPANY_LIST, company=company)
+def generate_answer_with_llm(prompt):
     llm_endpoint_url = "http://localhost:8086"
     client = OpenAI(
         base_url=f"{llm_endpoint_url}/v1",
@@ -91,6 +76,11 @@ def map_company_with_llm(company):
     # get response
     response = completion.choices[0].message.content
     print("Response: ", response)
+    return response
+
+def map_company_with_llm(company):
+    prompt = PROMPT_TEMPLATE.format(company_list=COMPANY_LIST, company=company)
+    response = generate_answer_with_llm(prompt)
     mapped_company = parse_company_name(response) #COMPANY_MAPPING[response]
     print("Mapped company: ", mapped_company)
     return mapped_company
@@ -119,6 +109,76 @@ def rerank_docs(docs, top_n=3):
         reranked_docs.append(docs[idx])
     return reranked_docs[:top_n]
 
+
+def get_docs_matching_metadata(metadata, docs):
+    """
+    metadata: {"company_year": "3M_2023"}
+    docs: list of documents
+    """
+    print(f"Searching for docs with metadata: {metadata}")
+    matching_docs = []
+    key = metadata.keys()[0]
+    value = metadata[key]
+
+    for doc in docs:
+        if doc.metadata[key] == value:
+            matching_docs.append(doc)
+    print(f"Number of matching docs: {len(matching_docs)}")
+    return matching_docs
+
+
+DOC_GRADER_PROMPT = """\
+Search Query: {query}.
+Documents:
+{documents}
+
+Read the documents and decide if any useful infomation can be extracted from them regarding the Search Query. 
+If yes, output the useful information in {{}}. Include financial figures when available. Example: {{The company has a revenue of $100 million.}}
+If no, output "No relevant information found."
+"""
+
+def get_context_bm25_llm(query, company, year, quarter=None):
+    vector_store = Chroma(
+        collection_name="doc_collection",
+        embedding_function=embeddings,
+        persist_directory=os.path.join(DATAPATH, "test_cocacola_v7"),
+    )
+    collection = vector_store.get()
+    id_list = collection['ids']
+    all_docs = vector_store.get_by_ids(id_list)
+
+    metadata = {"company_year_quarter":f"{company}_{year}_{quarter}"}
+    docs = get_docs_matching_metadata(metadata, all_docs)
+    if not docs:
+        metadata = {"company_year":f"{company}_{year}"}
+        docs = get_docs_matching_metadata(metadata, all_docs)
+    if not docs:
+        metadata = {"company":f"{company}"}
+        docs = get_docs_matching_metadata(metadata, all_docs)
+    
+    if not docs:
+        return "No relevant document found. Change your query and try again."
+    
+    print(f"Number of docs found matching metadata: {len(docs)}")
+    # use BM25 to narrow down
+    k = 10
+    retriever = BM25Retriever.from_documents(docs, k=k)
+    results = retriever.invoke(query)
+    print(f"Number of docs found with BM25: {len(results)}")
+
+    # use LLM to judge if there is any useful information
+    context = ""
+    for i, doc in enumerate(results):
+        result = get_content(doc)
+        context += f"Doc[{i+1}]:\n{result}\n"
+    
+    prompt = DOC_GRADER_PROMPT.format(query=query, documents=context)
+    response = generate_answer_with_llm(prompt)
+    print("Doc grader LLM response: ", response)
+    return response
+
+
+
 def get_context(query, company, year, quarter=None):
     """
     Search the knowledge base for the most relevant document
@@ -130,11 +190,7 @@ def get_context(query, company, year, quarter=None):
         embedding_function=embeddings,
         persist_directory=os.path.join(DATAPATH, "test_cocacola_v7"),
     )
-    # try:
-    #     company = COMPANY_MAPPING[company]
-    # except:
-    #     print("Using LLM to map company name...")
-    #     company = map_company_with_llm(company)
+
     company = company.upper()
     if company in COMPANY_LIST:
         print(f"Company {company} found in the list")
@@ -203,7 +259,7 @@ def get_tables_with_key(key):
 
 
 def get_company_list():
-    with open(os.path.join(DATAPATH, "company_list.txt"), "r") as f:
+    with open(os.path.join(DATAPATH, "new_company_list.txt"), "r") as f:
         company_list = f.readlines()
     company_list = [c.strip() for c in company_list]
     print("Number of companies: ", len(company_list))

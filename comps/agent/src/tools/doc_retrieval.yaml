@@ -1,6 +1,6 @@
 get_context:
   description: Search knowledge base of SEC filings.
-  callable_api: doc_retrieval.py:get_context
+  callable_api: doc_retrieval.py:get_context_bm25_llm
   args_schema:
     query:
       type: str

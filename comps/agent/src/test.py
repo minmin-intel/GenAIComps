@@ -44,7 +44,7 @@ def test_agent_local(args):
 
     df = get_test_data(args)
     # print(df.columns)
-    df = df.loc[df["company"] == "Coca-Cola"]
+    df = df.loc[df["company"] == "Amcor"]
     #df = df.loc[df["doc_name"] == "3M_2023Q2_10Q"]
     # df = df.loc[df["doc_name"]=="3M_2022_10K"]
 
