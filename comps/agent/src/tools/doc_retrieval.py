@@ -68,11 +68,17 @@ def generate_answer_with_llm(prompt):
         api_key="token-abc123",
     )
 
+    params = {
+        "max_tokens": 4096,
+        "temperature": 0.2,
+    }
+
     completion = client.chat.completions.create(
         model="meta-llama/Llama-3.3-70B-Instruct",
         messages=[
             {"role": "user", "content": prompt}
-        ]
+        ],
+        **params
         )
 
     # get response
@@ -281,7 +287,7 @@ Output: Need clarification.
 
 
 def get_context_bm25_llm(query, company, year, quarter = ""):
-    k = 10
+    k = 5
     vector_store = Chroma(
         collection_name="doc_collection",
         embedding_function=embeddings,
@@ -294,22 +300,22 @@ def get_context_bm25_llm(query, company, year, quarter = ""):
     chunks_bm25 = bm25_search_broad(query, company, year, quarter, vector_store, k=k, doc_type="chunk")
     chunks_sim = similarity_search(vector_store, k, query, company, year, quarter)
     chunks = chunks_bm25 + chunks_sim
-    # get text chunks for the company
-    # chunks = hybrid_search(query, company, vector_store, k, doc_type="chunk")
     
-    # # tables
-    # vector_store_table = Chroma(
-    #     collection_name="table_collection",
-    #     embedding_function=embeddings,
-    #     persist_directory=os.path.join(DATAPATH, "test_cocacola_v7"),
-    # )
+    # tables
+    vector_store_table = Chroma(
+        collection_name="table_collection",
+        embedding_function=embeddings,
+        persist_directory=os.path.join(DATAPATH, "test_cocacola_v7"),
+    )
 
-    # # get tables matching metadata
-    # tables = hybrid_search(query, company, vector_store_table, k, doc_type="table")
+    # get tables matching metadata
+    tables_bm25 = bm25_search_broad(query, company, year, quarter, vector_store_table, k=k, doc_type="table")
+    tables_sim = similarity_search(vector_store_table, k, query, company, year, quarter)
+    tables = tables_bm25 + tables_sim
 
     # get unique results
-    context = get_unique_docs(chunks)
-    print("Context:\n", context)
+    context = get_unique_docs(chunks+tables)
+    # print("Context:\n", context)
 
     if context:
         query = f"{query} for {company} in {year} {quarter}"
