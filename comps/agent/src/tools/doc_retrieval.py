@@ -289,6 +289,7 @@ def get_context_bm25_llm(query, company, year, quarter = ""):
     )
 
     company = get_company_name_in_kb(company)
+    print(company)
 
     chunks_bm25 = bm25_search_broad(query, company, year, quarter, vector_store, k=k, doc_type="chunk")
     chunks_sim = similarity_search(vector_store, k, query, company, year, quarter)
@@ -345,6 +346,7 @@ def get_company_name_in_kb(company):
     else:
         company = map_company_with_llm(company)
         print(f"Mapped to {company}")
+    return company
 
 def get_context(query, company, year, quarter=None):
     """
@@ -425,11 +427,6 @@ def get_tables(query, company, year="", quarter=""):
     """
     Get top3 tables for a company for a given year and quarter
     """
-    # try:
-    #     company = COMPANY_MAPPING[company]
-    # except:
-    #     print("Using LLM to map company name...")
-    #     company = map_company_with_llm(company)
     company = company.upper()
     if company in COMPANY_LIST:
         print(f"Company {company} found in the list")
@@ -441,7 +438,7 @@ def get_tables(query, company, year="", quarter=""):
     print(f"Getting tables for company: {company}, year: {year}, quarter: {quarter}")
 
     ## dense retriever approach
-    k = 1
+    k = 3
     vector_store = Chroma(
         collection_name="table_collection",
         embedding_function=embeddings,
