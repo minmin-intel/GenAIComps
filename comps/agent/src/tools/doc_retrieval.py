@@ -496,10 +496,10 @@ if __name__ == "__main__":
 
     if args.debug:
         # query = "Which debt securities are registered to trade on a national securities exchange under 3M's name as of Q2 of 2023?"
-        query = "key agenda of 8K filing"
+        query = "account receivable"
         company = "Amcor"
-        year = "2022"
-        quarter = "Q2"
+        year = "2020"
+        quarter = ""
         result = get_context_bm25_llm(query, company, year, quarter)
         print(result)
         print("="*50)

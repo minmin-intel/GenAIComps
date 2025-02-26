@@ -4,7 +4,7 @@ search_knowledge_base:
   args_schema:
     query:
       type: str
-      description: the query to search for. Do not include the company name.
+      description: the query to search for. Should be detailed. Do not include the company name.
     company:
       type: str
       description: the company of interest.

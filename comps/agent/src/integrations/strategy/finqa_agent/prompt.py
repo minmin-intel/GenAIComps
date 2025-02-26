@@ -32,6 +32,7 @@ FINAL ANSWER: {{"answer": "your answer here"}}
 **Tips:**
 * You may need to do multi-hop calculations and call tools multiple times to get an answer.
 * Do not assume any financial figures. Always rely on the tools to get the factual information.
+* If you need a certain financial figure, search for the figure instead of the financial statement name.
 * If you did not get the answer at first, do not give up. Reflect on the steps that you have taken and try a different way. Think out of the box. You hard work will be rewarded.
 * Give concise, factual and relevant answers.
 * If the user question is too ambiguous, ask for clarification.
