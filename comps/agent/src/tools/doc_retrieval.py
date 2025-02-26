@@ -53,11 +53,11 @@ This is the company of interest: {company}
 Map the company of interest to the company name in the knowledge base. Output the company name in  {{}}. Example: {{3M}}
 """
 
-def parse_company_name(response):
+def parse_response(response):
     # response {3M}
-    try:
+    if "{" in response:
         company = response.split("{")[1].split("}")[0]
-    except:
+    else:
         company = ""
     return company
 
@@ -83,7 +83,7 @@ def generate_answer_with_llm(prompt):
 def map_company_with_llm(company):
     prompt = PROMPT_TEMPLATE.format(company_list=COMPANY_LIST, company=company)
     response = generate_answer_with_llm(prompt)
-    mapped_company = parse_company_name(response) #COMPANY_MAPPING[response]
+    mapped_company = parse_response(response) #COMPANY_MAPPING[response]
     print("Mapped company: ", mapped_company)
     return mapped_company
 
@@ -149,7 +149,7 @@ Documents:
 {documents}
 
 Question: {query}
-Now take a deep breath and think step by step to answer the question.
+Now take a deep breath and think step by step to answer the question. Wrap your final answer in {{}}. Example: {{The company has a revenue of $100 million.}}
 """
 
 from langchain_core.documents import Document
@@ -173,8 +173,7 @@ def convert_docs(docs, doc_type="chunk"):
     return text
 
 
-def bm25_search(query, company, vector_store, k=10, doc_type="chunk"):
-    metadata = ("company",f"{company}")
+def bm25_search(query, metadata, vector_store, k=10, doc_type="chunk"):
     docs = get_docs_matching_metadata(metadata, vector_store)
 
     if docs:
@@ -193,9 +192,28 @@ def bm25_search(query, company, vector_store, k=10, doc_type="chunk"):
         results = []
     return results
 
-def hybrid_search(query, comapny, vector_store, k=10, doc_type="chunks"):
+
+def bm25_search_broad(query, company, year, quarter, vector_store, k=10, doc_type="chunk"):
+    metadata = ("company_year_quarter",f"{company}_{year}_{quarter}")
+    print(f"BM25: Searching for docs with metadata: {metadata}")
+    docs = bm25_search(query, metadata, vector_store, k=k, doc_type=doc_type)
+    if not docs:
+        print("BM25: No docs found with company, year and quarter filter, only search with company and year filter")
+        metadata = ("company_year",f"{company}_{year}")
+        docs = bm25_search(query, metadata, vector_store, k=k, doc_type=doc_type)
+    if not docs:
+        print("BM25: No docs found with company and year filter, only search with company filter")
+        metadata = ("company",f"{company}")
+        docs = bm25_search(query, metadata, vector_store, k=k, doc_type=doc_type)
+    if docs:
+        return docs
+    else:
+        return []
+
+
+def hybrid_search(query, metadata, vector_store, k=10, doc_type="chunks"):
     # bm25 search
-    chunks_bm25 = bm25_search(query, comapny, vector_store, k=k, doc_type=doc_type)
+    chunks_bm25 = bm25_search(query, metadata, vector_store, k=k, doc_type=doc_type)
     print(f"Number of docs found with BM25 search: {len(chunks_bm25)}")
 
     # similarity search over summary/title
@@ -226,43 +244,81 @@ def get_unique_docs(docs):
     print(f"Number of unique docs found: {len(results)}")
     return context
 
+METADATA_PROMPT = """
+Given the query, decide which company, year and quarter the query is related to. 
+** Procedure: **
+1. If the query is ambiguous, and you cannot determine the company from it, output "Need clarification."
+2. If the query asks about multiple companies, output "Need clarification."
+3. If the query asks about multiple years, leave the year blank.
+4. If the query asks about multiple quarters, leave the quarter blank.
+5. If the query only asks about year but not quarter, leave the quarter blank.
+6. If the query did not mention any time information, leave the year and quarter blank.
+7. If you can decide the company, year and quarter, output the metadata in json format.
 
-def get_context_bm25_llm(query, company):
+Examples: 
+Query: What is the revenue of 3M in Q2 of 2023?
+Output:
+```json
+{"company": "3M", "year": "2023", "quarter": "Q2"}
+```
+
+Query: What is the revenue of 3M in 2023?
+Output:
+```json
+{"company": "3M", "year": "2023"}
+```
+
+Query: What is the revenue of 3M?
+Output:
+```json
+{"company": "3M"}
+```
+
+Query: What is the revenue in 2023?
+Output: Need clarification.
+
+"""
+
+
+def get_context_bm25_llm(query, company, year, quarter = ""):
+    k = 10
     vector_store = Chroma(
         collection_name="doc_collection",
         embedding_function=embeddings,
         persist_directory=os.path.join(DATAPATH, "test_cocacola_v7"),
     )
-    # metadata = ("company_year_quarter",f"{company}_{year}_{quarter}")
-    # docs = get_docs_matching_metadata(metadata, all_docs)
-    # if not docs:
-    #     metadata = ("company_year",f"{company}_{year}")
-    #     docs = get_docs_matching_metadata(metadata, all_docs)
-    # if not docs:
 
+    company = get_company_name_in_kb(company)
+
+    chunks_bm25 = bm25_search_broad(query, company, year, quarter, vector_store, k=k, doc_type="chunk")
+    chunks_sim = similarity_search(vector_store, k, query, company, year, quarter)
+    chunks = chunks_bm25 + chunks_sim
     # get text chunks for the company
-    k = 2
-    chunks = hybrid_search(query, company, vector_store, k, doc_type="chunk")
+    # chunks = hybrid_search(query, company, vector_store, k, doc_type="chunk")
     
-    # tables
-    vector_store_table = Chroma(
-        collection_name="table_collection",
-        embedding_function=embeddings,
-        persist_directory=os.path.join(DATAPATH, "test_cocacola_v7"),
-    )
+    # # tables
+    # vector_store_table = Chroma(
+    #     collection_name="table_collection",
+    #     embedding_function=embeddings,
+    #     persist_directory=os.path.join(DATAPATH, "test_cocacola_v7"),
+    # )
 
-    # get tables matching metadata
-    tables = hybrid_search(query, company, vector_store_table, k, doc_type="table")
+    # # get tables matching metadata
+    # tables = hybrid_search(query, company, vector_store_table, k, doc_type="table")
 
     # get unique results
-    context = get_unique_docs(chunks + tables)
+    context = get_unique_docs(chunks)
     print("Context:\n", context)
 
-    # prompt = DOC_GRADER_PROMPT.format(query=query, documents=context)
-    prompt = ANSWER_PROMPT.format(query=query, documents=context)
-    response = generate_answer_with_llm(prompt)
-    response = parse_company_name(response)
-    print("LLM response: ", response)
+    if context:
+        query = f"{query} for {company} in {year} {quarter}"
+        prompt = ANSWER_PROMPT.format(query=query, documents=context)
+        response = generate_answer_with_llm(prompt)
+        response = parse_response(response)
+    else:
+        response = f"No relevant information found for {company} in {year} {quarter}."
+
+    print("Response: ", response)
     return response
 
 def similarity_search(vector_store, k, query, company, year, quarter=None):
@@ -277,10 +333,18 @@ def similarity_search(vector_store, k, query, company, year, quarter=None):
         docs = vector_store.similarity_search(query, k=k, filter={"company": f"{company}"})
     
     if not docs:
-        return None
+        return []
     else:
         return docs
 
+def get_company_name_in_kb(company):
+    # TODO: deal with cases where company not in kb.
+    company = company.upper()
+    if company in COMPANY_LIST:
+        print(f"Company {company} found in the list")
+    else:
+        company = map_company_with_llm(company)
+        print(f"Mapped to {company}")
 
 def get_context(query, company, year, quarter=None):
     """
@@ -294,12 +358,7 @@ def get_context(query, company, year, quarter=None):
         persist_directory=os.path.join(DATAPATH, "test_cocacola_v7"),
     )
 
-    company = company.upper()
-    if company in COMPANY_LIST:
-        print(f"Company {company} found in the list")
-    else:
-        company = map_company_with_llm(company)
-        print(f"Mapped to {company}")
+    company = get_company_name_in_kb(company)
 
     print(f"Searcing for company: {company}, year: {year}, quarter: {quarter}")
 
@@ -433,8 +492,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.debug:
-        query = "Which debt securities are registered to trade on a national securities exchange under 3M's name as of Q2 of 2023?"
-        result = get_context_bm25_llm(query, "3M")
+        # query = "Which debt securities are registered to trade on a national securities exchange under 3M's name as of Q2 of 2023?"
+        query = "key agenda of 8K filing"
+        company = "Amcor"
+        year = "2022"
+        quarter = "Q2"
+        result = get_context_bm25_llm(query, company, year, quarter)
         print(result)
         print("="*50)
 
@@ -469,7 +532,7 @@ if __name__ == "__main__":
                 f.write(json.dumps({"question": query, "company": company, "answer": result}) + "\n")
 
         df["response"] = output_list
-        df.to_csv(os.path.join(WORKDIR, "datasets/financebench/results/bm25_dense_llm.csv"), index=False)
+        df.to_csv(os.path.join(WORKDIR, "datasets/financebench/results/bm25_dense_llm_v2.csv"), index=False)
 
     # df_ref = pd.read_csv(os.path.join(WORKDIR, "datasets/financebench/results/finqa_agent_v7_all_t0p5_graded.csv"))
     # df.rename(columns={"answer": "response"}, inplace=True)
