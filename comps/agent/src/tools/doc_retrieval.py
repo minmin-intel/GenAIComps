@@ -200,6 +200,12 @@ def bm25_search(query, metadata, vector_store, k=10, doc_type="chunk"):
 
 
 def bm25_search_broad(query, company, year, quarter, vector_store, k=10, doc_type="chunk"):
+    # search with company filter, but query is query_company_quarter
+    metadata = ("company",f"{company}")
+    query1 = f"{query} {year} {quarter}"
+    docs1 = bm25_search(query1, metadata, vector_store, k=k, doc_type=doc_type)
+
+    # search with metadata filters
     metadata = ("company_year_quarter",f"{company}_{year}_{quarter}")
     print(f"BM25: Searching for docs with metadata: {metadata}")
     docs = bm25_search(query, metadata, vector_store, k=k, doc_type=doc_type)
@@ -211,6 +217,8 @@ def bm25_search_broad(query, company, year, quarter, vector_store, k=10, doc_typ
         print("BM25: No docs found with company and year filter, only search with company filter")
         metadata = ("company",f"{company}")
         docs = bm25_search(query, metadata, vector_store, k=k, doc_type=doc_type)
+
+    docs = docs + docs1
     if docs:
         return docs
     else:
@@ -329,6 +337,9 @@ def get_context_bm25_llm(query, company, year, quarter = ""):
     return response
 
 def similarity_search(vector_store, k, query, company, year, quarter=None):
+    query1 = f"{query} {year} {quarter}"
+    docs1 = vector_store.similarity_search(query1, k=k, filter={"company": f"{company}"})
+
     docs = vector_store.similarity_search(query, k=k, filter={"company_year_quarter": f"{company}_{year}_{quarter}"})
 
     if not docs: # if no relevant document found, relax the filter
@@ -339,6 +350,7 @@ def similarity_search(vector_store, k, query, company, year, quarter=None):
         print("No relevant document found with company_year filter, only serach with company.....")
         docs = vector_store.similarity_search(query, k=k, filter={"company": f"{company}"})
     
+    docs = docs + docs1
     if not docs:
         return []
     else:
@@ -496,9 +508,9 @@ if __name__ == "__main__":
 
     if args.debug:
         # query = "Which debt securities are registered to trade on a national securities exchange under 3M's name as of Q2 of 2023?"
-        query = "account receivable"
+        query = "current assets, inventory, and current liabilities"
         company = "Amcor"
-        year = "2020"
+        year = "2022"
         quarter = ""
         result = get_context_bm25_llm(query, company, year, quarter)
         print(result)
