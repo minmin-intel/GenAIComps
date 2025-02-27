@@ -127,7 +127,7 @@ def get_docs_matching_metadata(metadata, vector_store):
     id_list = collection['ids']
     all_docs = vector_store.get_by_ids(id_list)
 
-    print(f"Searching for docs with metadata: {metadata}")
+    #print(f"Searching for docs with metadata: {metadata}")
     matching_docs = []
     key = metadata[0]
     value = metadata[1]
@@ -135,7 +135,7 @@ def get_docs_matching_metadata(metadata, vector_store):
     for doc in all_docs:
         if doc.metadata[key] == value:
             matching_docs.append(doc)
-    print(f"Number of matching docs: {len(matching_docs)}")
+    #print(f"Number of matching docs: {len(matching_docs)}")
     return matching_docs
 
 
@@ -187,12 +187,12 @@ def bm25_search(query, metadata, vector_store, k=10, doc_type="chunk"):
         docs_text = convert_docs(docs, doc_type=doc_type)
         retriever = BM25Retriever.from_documents(docs_text, k=k)
         docs_bm25 = retriever.invoke(query)
-        print(f"Number of docs found with BM25 over content: {len(docs_bm25)}")
+#        print(f"Number of docs found with BM25 over content: {len(docs_bm25)}")
 
         # BM25 search over summary/title
         retriever = BM25Retriever.from_documents(docs, k=k)
         docs_bm25_title = retriever.invoke(query)
-        print(f"Number of docs found with BM25 over title: {len(docs_bm25_title)}")
+#        print(f"Number of docs found with BM25 over title: {len(docs_bm25_title)}")
         results = docs_bm25 + docs_bm25_title
     else:
         results = []
@@ -333,7 +333,7 @@ def get_context_bm25_llm(query, company, year, quarter = ""):
     else:
         response = f"No relevant information found for {company} in {year} {quarter}."
 
-    print("Response: ", response)
+    #print("Response: ", response)
     return response
 
 def similarity_search(vector_store, k, query, company, year, quarter=None):
@@ -508,7 +508,8 @@ if __name__ == "__main__":
 
     if args.debug:
         # query = "Which debt securities are registered to trade on a national securities exchange under 3M's name as of Q2 of 2023?"
-        query = "current assets, inventory, and current liabilities"
+        #query = "current assets, inventory, and current liabilities"
+        query="gross margin"
         company = "Amcor"
         year = "2022"
         quarter = ""
