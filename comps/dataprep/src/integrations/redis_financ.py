@@ -1,6 +1,7 @@
 from langchain_community.embeddings import HuggingFaceBgeEmbeddings
 from langchain_huggingface import HuggingFaceEndpointEmbeddings
 from langchain_community.vectorstores import Redis
+from langchain_core.documents import Document
 from docling.document_converter import DocumentConverter
 from openai import OpenAI
 import os
@@ -147,7 +148,7 @@ def generate_answer(prompt):
 
 def generate_metadata_with_llm(full_doc):
     # tokenizer = AutoTokenizer.from_pretrained(args.model)
-    # get the first 5000 characters
+    # get the first 10000 characters
     prompt = METADATA_PROMPT.format(document=full_doc[:10000])
     metadata = generate_answer(prompt)
     print(metadata)
@@ -170,8 +171,9 @@ def generate_metadata_with_llm(full_doc):
 
 def save_full_doc(full_doc: str, metadata: dict):
     print("Saving full doc....")
-    kvstore = RedisKVStore(redis_uri=REDIS_URL)
-    kvstore.put(metadata["doc_title"], {"full_doc": full_doc, **metadata}, "full_docs")
+    kvstore = RedisKVStore(redis_uri=REDIS_URL_KV)
+    index_name = get_index_name("full_doc", metadata)
+    kvstore.put(metadata["doc_title"], {"full_doc": full_doc, **metadata}, index_name)
     return None 
 
 
@@ -180,7 +182,7 @@ def save_company_name(metadata: dict):
     # collection: company_list
     # key: company
     print("Saving company name....")
-    kvstore = RedisKVStore(redis_uri=REDIS_URL)
+    kvstore = RedisKVStore(redis_uri=REDIS_URL_KV)
     company_list_dict = kvstore.get("company", "company_list")
     if company_list_dict:
         company_list = company_list_dict["company"]
@@ -215,16 +217,29 @@ def save_company_name(metadata: dict):
 
     return metadata
 
-    
+def get_index_name(doc_type: str, metadata: dict):
+    company = metadata["company"]
+    if doc_type == "chunks":
+        index_name = f"chunks_{company}"
+    elif doc_type == "tables":
+        index_name = f"tables_{company}"
+    elif doc_type == "titles":
+        index_name = f"titles_{company}"
+    elif doc_type == "full_doc":
+        index_name = f"full_doc_{company}"
+    else:
+        raise ValueError("doc_type should be either chunks, tables, titles, or full_doc.")
+    return index_name
 
 def save_doc_title(doc_title: str, metadata: dict):
     print("Saving doc title....")
     embedder = get_embedder()
+    index_name = get_index_name("titles", metadata)
     _, keys = Redis.from_texts_return_keys(
             texts=[doc_title],
             embedding=embedder,
-            index_name="titles",
-            redis_url=REDIS_URL,
+            index_name=index_name,
+            redis_url=REDIS_URL_VECTOR,
             metadatas=[metadata],
         )
     return keys
@@ -283,19 +298,24 @@ def save_chunk(chunk: tuple, metadata: dict, doc_type="chunks"):
 
     doc_id = str(uuid.uuid4())
     metadata["doc_id"] = doc_id
+    metadata["doc_type"] = doc_type
     print(f"Chunk metadata: {metadata}")
+    index_name = get_index_name(doc_type, metadata)
+    print(f"Index name: {index_name}")
+    print("Embedding summary and saving to vector db....")
     # embed summary and save to vector db
     _, key = Redis.from_texts_return_keys(
             texts=[chunk_summary],
             embedding=embedder,
-            index_name=doc_type,
-            redis_url=REDIS_URL,
+            index_name=index_name,
+            redis_url=REDIS_URL_VECTOR,
             metadatas=[metadata],
         )
     
     # save chunk_content to kvstore
-    kvstore = RedisKVStore(redis_uri=REDIS_URL)
-    kvstore.put(doc_id, {"content": chunk_content, "summary":chunk_summary,**metadata}, doc_type)
+    print("Saving to kvstore....")
+    kvstore = RedisKVStore(redis_uri=REDIS_URL_KV)
+    kvstore.put(doc_id, {"content": chunk_content, "summary":chunk_summary, "metadata":metadata}, index_name)
     return key
 
 def get_table_summary_with_llm(table_md):
@@ -371,9 +391,19 @@ def ingest_financial_data(filename: str):
 
 ################ retrieval functions ####################
 from langchain_community.retrievers import BM25Retriever
+from langchain_community.vectorstores.redis import RedisText
+
+ANSWER_PROMPT = """\
+You are a financial analyst. Read the documents below and answer the question.
+Documents:
+{documents}
+
+Question: {query}
+Now take a deep breath and think step by step to answer the question. Wrap your final answer in {{}}. Example: {{The company has a revenue of $100 million.}}
+"""
 
 def get_company_list():
-    kvstore = RedisKVStore(redis_uri=REDIS_URL)
+    kvstore = RedisKVStore(redis_uri=REDIS_URL_KV)
     company_list_dict = kvstore.get("company", "company_list")
     if company_list_dict:
         company_list = company_list_dict["company"]
@@ -391,70 +421,85 @@ def get_company_name_in_kb(company, company_list):
     else:
         return response.strip("{}").upper()
 
-def get_docs_matching_metadata(metadata, doc_type="chunks"):
+def get_docs_matching_metadata(metadata, collection_name):
     """
     metadata: ("company_year", "3M_2023")
     docs: list of documents
     """
     key = metadata[0]
     value = metadata[1]
-    kvstore= RedisKVStore(redis_uri=REDIS_URL)
-    collection = kvstore.get_all(doc_type) # collection is a dict
+    kvstore= RedisKVStore(redis_uri=REDIS_URL_KV)
+    collection = kvstore.get_all(collection_name) # collection is a dict
 
     matching_docs = []
     for idx in collection:
         doc = collection[idx]
-        if doc[key] == value:
+        if doc["metadata"][key] == value:
             print(f"Found doc with matching metadata {metadata}")
-            print(doc["doc_title"])
+            print(doc["metadata"]["doc_title"])
             matching_docs.append(doc)
-    print(f"Number of docs found with metadata {metadata}: {len(matching_docs)}")
+    print(f"Number of docs found with search_metadata {metadata}: {len(matching_docs)}")
     return matching_docs
     
    
 
 def convert_docs(docs):
-    text = []
+    converted_docs_content = []
+    converted_docs_summary = []
     for doc in docs:
         content = doc["content"]
-        converted = Document(
+        # convert content to Document object
+        metadata = {"type":"content",**doc["metadata"]}
+        converted_content = Document(
+                id = doc["metadata"]["doc_id"],
                 page_content=content,
-                metadata=doc.metadata
+                metadata=metadata
             )
-        text.append(converted)
+        
+        # convert summary to Document object
+        metadata = {"type":"summary", "content":content, **doc["metadata"]}
+        converted_summary = Document(
+                id = doc["metadata"]["doc_id"],
+                page_content=doc["summary"],
+                metadata=metadata
+            )
+        converted_docs_content.append(converted_content)
+        converted_docs_summary.append(converted_summary)
 
-    return text
+    return converted_docs_content, converted_docs_summary
 
-def bm25_search(query, metadata, vector_store, k=10, doc_type="chunk"):
-    docs = get_docs_matching_metadata(metadata, vector_store)
+def bm25_search(query, metadata, company, doc_type="chunks", k=10):
+    collection_name = f"{doc_type}_{company}"
+
+    docs = get_docs_matching_metadata(metadata, collection_name)
 
     if docs:
+        docs_text, docs_summary = convert_docs(docs)
         # BM25 search over content
-        docs_text = convert_docs(docs, doc_type=doc_type)
         retriever = BM25Retriever.from_documents(docs_text, k=k)
         docs_bm25 = retriever.invoke(query)
-#        print(f"Number of docs found with BM25 over content: {len(docs_bm25)}")
+        print(f"BM25: Found {len(docs_bm25)} docs over content with search metadata: {metadata}")
 
         # BM25 search over summary/title
-        retriever = BM25Retriever.from_documents(docs, k=k)
-        docs_bm25_title = retriever.invoke(query)
-#        print(f"Number of docs found with BM25 over title: {len(docs_bm25_title)}")
-        results = docs_bm25 + docs_bm25_title
+        retriever = BM25Retriever.from_documents(docs_summary, k=k)
+        docs_bm25_summary = retriever.invoke(query)
+        print(f"BM25: Found {len(docs_bm25_summary)} docs over summary with search metadata: {metadata}")
+        results = docs_bm25 + docs_bm25_summary
     else:
         results = []
     return results
 
 
-def bm25_search_broad(query, company, year, quarter, vector_store, k=10, doc_type="chunk"):
+def bm25_search_broad(query, company, year, quarter, vector_store, k=10, doc_type="chunks"):
     # search with company filter, but query is query_company_quarter
     metadata = ("company",f"{company}")
     query1 = f"{query} {year} {quarter}"
-    docs1 = bm25_search(query1, metadata, vector_store, k=k, doc_type=doc_type)
+    docs1 = bm25_search(query1, metadata, company, k=k, doc_type=doc_type)
 
     # search with metadata filters
     metadata = ("company_year_quarter",f"{company}_{year}_{quarter}")
     print(f"BM25: Searching for docs with metadata: {metadata}")
-    docs = bm25_search(query, metadata, vector_store, k=k, doc_type=doc_type)
+    docs = bm25_search(query, metadata, company, k=k, doc_type=doc_type)
     if not docs:
         print("BM25: No docs found with company, year and quarter filter, only search with company and year filter")
         metadata = ("company_year",f"{company}_{year}")
@@ -470,6 +515,82 @@ def bm25_search_broad(query, company, year, quarter, vector_store, k=10, doc_typ
     else:
         return []
 
+def similarity_search(vector_store, k, query, company, year, quarter=None):
+    query1 = f"{query} {year} {quarter}"
+    docs1 = vector_store.similarity_search(query1, k=k, filter=(RedisText("company") == company))
+
+    docs = vector_store.similarity_search(query, k=k, filter=(RedisText("company_year_quarter")==f"{company}_{year}_{quarter}"))
+
+    if not docs: # if no relevant document found, relax the filter
+        print("No relevant document found with company, year and quarter filter, only search with comany and year")
+        docs = vector_store.similarity_search(query, k=k, filter=(RedisText("company_year")==f"{company}_{year}"))
+        
+    if not docs: # if no relevant document found, relax the filter
+        print("No relevant document found with company_year filter, only serach with company.....")
+        docs = vector_store.similarity_search(query, k=k, filter=(RedisText("company")==f"{company}"))
+    
+    docs = docs + docs1
+    if not docs:
+        return []
+    else:
+        return docs
+
+
+def get_content(doc):
+    # doc can be converted doc
+    # of saved doc in vector store
+    """
+    metadata = {"type":"summary", "content":content, **doc["metadata"]}
+        converted_summary = Document(
+                id = doc["metadata"]["doc_id"],
+                page_content=doc["summary"],
+                metadata=metadata
+            )
+    
+    _, key = Redis.from_texts_return_keys(
+            texts=[chunk_summary],
+            embedding=embedder,
+            index_name=index_name,
+            redis_url=REDIS_URL_VECTOR,
+            metadatas=[metadata],
+        )
+    """
+    if "type" in doc.metadata and doc.metadata["type"] == "summary":
+        content = doc.metadata["content"]
+    elif type in doc.metadata and doc.metadata["type"] == "content":
+        content = doc.page_content
+    else:
+        doc_id = doc.metadata["doc_id"]
+        kvstore = RedisKVStore(redis_uri=REDIS_URL_KV)
+        collection_name = get_index_name(doc.metadata["doc_type"], doc.metadata)
+        result = kvstore.get(doc_id, collection_name)
+        content = result["content"]
+
+    return content
+
+    
+def get_unique_docs(docs):
+    results = []
+    context = ""
+    i = 1
+    for doc in docs:
+        content = get_content(doc)
+        if content not in results:
+            results.append(content)
+            doc_title = doc.metadata["doc_title"]
+            ret_doc = f"Doc [{i}] from {doc_title}:\n{content}\n"
+            context += ret_doc
+            i += 1
+    print(f"Number of unique docs found: {len(results)}")
+    return context
+
+def parse_response(response):
+    # response {3M}
+    if "{" in response:
+        company = response.split("{")[1].split("}")[0]
+    else:
+        company = ""
+    return company
 
 def get_context_bm25_llm(query, company, year, quarter = ""):
     k = 5
@@ -482,13 +603,13 @@ def get_context_bm25_llm(query, company, year, quarter = ""):
     embedder = get_embedder()
 
     # chunks
-    vector_store = Redis(embedding=embedder, index_name="chunks", redis_url=REDIS_URL)
+    vector_store = Redis(embedding=embedder, index_name="chunks", redis_url=REDIS_URL_VECTOR)
     chunks_bm25 = bm25_search_broad(query, company, year, quarter, vector_store, k=k, doc_type="chunk")
     chunks_sim = similarity_search(vector_store, k, query, company, year, quarter)
     chunks = chunks_bm25 + chunks_sim
     
     # tables
-    vector_store_table = Redis(embedding=embedder, index_name="tables", redis_url=REDIS_URL)
+    vector_store_table = Redis(embedding=embedder, index_name="tables", redis_url=REDIS_URL_VECTOR)
 
     # get tables matching metadata
     tables_bm25 = bm25_search_broad(query, company, year, quarter, vector_store_table, k=k, doc_type="table")
@@ -509,35 +630,44 @@ def get_context_bm25_llm(query, company, year, quarter = ""):
     return response
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--option", type=str, default="ingest", help="ingest or retrieve")
+    args = parser.parse_args()
+
     # # data ingestion
-    # WORKDIR = os.getenv("WORKDIR")
-    # DATAPATH= os.path.join(WORKDIR, "datasets/financebench/dataprep")
-    # # files = ["3M_2018_10K-table-7.md"]
-    # files = ["https://www.fool.com/earnings/call-transcripts/2025/03/04/progressive-pgr-q4-2024-earnings-call-transcript/"]
-    # for f in files:
-    #     print("Ingesting file:", f)
-    #     if "https://" in f:
-    #         ingest_financial_data(f)
-    #     else:
-    #         if not os.path.exists(os.path.join(DATAPATH, f)):
-    #             print("File not found:", f)
-    #             continue
-    #         ingest_financial_data(os.path.join(DATAPATH, f))
-    #     print("="*50)
+    if args.option == "ingest":
+        WORKDIR = os.getenv("WORKDIR")
+        DATAPATH= os.path.join(WORKDIR, "datasets/financebench/dataprep")
+        # files = ["3M_2018_10K-table-7.md"]
+        files = ["https://www.fool.com/earnings/call-transcripts/2025/03/04/progressive-pgr-q4-2024-earnings-call-transcript/"]
+        for f in files:
+            print("Ingesting file:", f)
+            if "https://" in f:
+                ingest_financial_data(f)
+            else:
+                if not os.path.exists(os.path.join(DATAPATH, f)):
+                    print("File not found:", f)
+                    continue
+                ingest_financial_data(os.path.join(DATAPATH, f))
+            print("="*50)
 
-    # # retrieval
-    get_docs_matching_metadata(("company", "PROGRESSIVE"), "chunks")
-    # from langchain_community.vectorstores.redis import RedisText
-    # embedder = HuggingFaceBgeEmbeddings(model_name=EMBED_MODEL)
-    # index_name="tables"
-    # vector_store = Redis(embedding=embedder, index_name=index_name, redis_url=REDIS_URL)
+    if args.option == "retrieve":
+        # # retrieval
+        company="PROGRESSIVE"
+        year="2024"
+        quarter="Q4"
+        collection_name=f"chunks_{company}"
+        search_metadata = ("company", company)
+        # get_docs_matching_metadata(search_metadata, collection_name)
+        bm25_search("revenue", search_metadata, company, k=2)
+        
+        
+        # query = "3M revenue in 2018"
+        # results = vector_store.similarity_search(query, k=2, filter=(RedisText("company") == "3M"))
 
-
-    # query = "3M revenue in 2018"
-    # results = vector_store.similarity_search(query, k=2, filter=(RedisText("company") == "3M"))
-
-    # print("Simple Similarity Search Results:")
-    # for doc in results:
-    #     print(f"Length of chunk {len(doc.page_content)}")
-    #     print(f"Content: {doc.page_content[:200]}...")
-    #     print(f"Metadata: {doc.metadata}")
+        # print("Simple Similarity Search Results:")
+        # for doc in results:
+        #     print(f"Length of chunk {len(doc.page_content)}")
+        #     print(f"Content: {doc.page_content[:200]}...")
+        #     print(f"Metadata: {doc.metadata}")
