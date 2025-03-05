@@ -96,7 +96,7 @@ class ReActAgentNodeLlama:
             history = assemble_history(messages)
             thread_history = ""
 
-        # print("@@@ Turn History:\n", history)
+        print("@@@ Turn History:\n", history)
         # print("@@@ Thread history:\n", thread_history)
 
         tools_used = self.tools
@@ -129,6 +129,8 @@ class ReActAgentNodeLlama:
                 ai_message = AIMessage(content=response, tool_calls=tool_calls)
             elif "answer" in output[0]:
                 ai_message = AIMessage(content=str(output[0]["answer"]))
+            else:
+                ai_message = AIMessage(content=response)
         else:
             ai_message = AIMessage(content=response)
 

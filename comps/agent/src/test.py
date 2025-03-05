@@ -43,9 +43,12 @@ def test_agent_local(args):
     config = {"recursion_limit": args.recursion_limit}
 
     df = get_test_data(args)
+
+    df = df.loc[df["agent_response"]=="Connection error."]
+    print(df.shape)
     # print(df.columns)
-    # df = df.loc[df["company"] == "3M"]
-    # df = df.loc[df["doc_name"] != "3M_2018_10K"]
+    #df = df.loc[df["company"] == "Amcor"]
+    #df = df.loc[df["doc_name"] == "3M_2023Q2_10Q"]
     # df = df.loc[df["doc_name"]=="3M_2022_10K"]
 
     agent_outputs = []

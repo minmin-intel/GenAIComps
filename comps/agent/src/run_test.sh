@@ -1,7 +1,12 @@
 # data
-filedir=$WORKDIR/financebench/data/ #$WORKDIR/datasets/financebench/ #
-filename=financebench_open_source.jsonl #difficult_questions.csv #
-output=$WORKDIR/datasets/financebench/results/finqa_agent_v6_all_t0p5.json
+#filedir=$WORKDIR/financebench/data/ #$WORKDIR/datasets/financebench/ #
+#filename=financebench_open_source.jsonl #difficult_questions.csv #
+filedir=$WORKDIR/datasets/financebench/results/
+filename=finqa_agent_v9_rest_rest_t0p5.csv
+
+output_filename=finqa_agent_v9_remain2_t0p5
+output=$WORKDIR/datasets/financebench/results/$output_filename.json
+
 
 # agent cofig
 model="meta-llama/Llama-3.3-70B-Instruct"
@@ -22,4 +27,4 @@ python test.py \
     --max_new_tokens 4096 \
     --temperature $temperature \
     --timeout 600 \
-    --output $output | tee $WORKDIR/datasets/financebench/results/finqa_agent_v6_all_t0p5.log
+    --output $output | tee $WORKDIR/datasets/financebench/results/$output_filename.log

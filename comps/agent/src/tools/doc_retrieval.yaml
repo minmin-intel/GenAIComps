@@ -1,29 +1,29 @@
-get_context:
+search_knowledge_base:
   description: Search knowledge base of SEC filings.
-  callable_api: doc_retrieval.py:get_context
+  callable_api: doc_retrieval.py:get_context_bm25_llm
   args_schema:
     query:
       type: str
-      description: the query to search for. Do not include the company name.
+      description: the query to search for. Should be detailed. Do not include the company name.
     company:
       type: str
       description: the company of interest.
     year:
       type: str
-      description: the year of interest, can only specify one year. cannot be an empty string.
+      description: the year of interest, can only specify one year. can be an empty string.
     quarter:
       type: str
       description: the quarter of interest, can only specify one quarter. can be 'Q1', 'Q2', 'Q3', 'Q4'. can be an empty string.
   return_output: retrieved_data
 
-# get_tables(company, year="", quarter="")
+
 # get_tables:
-#   description: Get tables from SEC filings.
+#   description: Get financial statements from SEC filings.
 #   callable_api: doc_retrieval.py:get_tables
 #   args_schema:
 #     query:
 #       type: str
-#       description: the query to search for.
+#       description: the financial statement to search for.
 #     company:
 #       type: str
 #       description: the company of interest.

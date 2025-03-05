@@ -10,9 +10,10 @@ except:
 import requests
 import time
 import json
-from docling.document_converter import DocumentConverter
+#from docling.document_converter import DocumentConverter
 import pandas as pd
 import os
+from tqdm import tqdm
 
 import glob
 import random
@@ -63,7 +64,7 @@ def get_context_of_table(table_md, full_doc):
 
 TABLE_SUMMARY_PROMPT = """\
 You are a financial analyst. You are given a table extracted from a SEC filing. Read the table and give it a descriptive title. 
-If the table is a financial statement, for example, balance sheet, income statement, cash flow statement, or statement of shareholders' equity, you should specify the type of financial statement in the title.
+If the table is a financial statement, for example, balance sheet, income statement, cash flow statement, statement of operations, or statement of shareholders' equity, you should specify the type of financial statement in the title.
 
 Table:
 
@@ -80,6 +81,13 @@ def get_table_summary_with_llm(table_md, args):
     table_summary = generate_answer(args, prompt)
     print(f"Table summary:\n{table_summary}")
     return table_summary
+
+def summarize_all_tables(tables, args):
+    output = []
+    for table_md in tqdm(tables, desc="Summarizing tables"):
+        table_summary = get_table_summary_with_llm(table_md, args)
+        output.append((table_md, table_summary))
+    return output
 
 def process_tables(conv_res, args):
     table_outputs = []
@@ -119,10 +127,18 @@ def save_docling_output(full_doc, conv_res, output_dir):
 
 from langchain_text_splitters import MarkdownTextSplitter
 import os
-def post_process_markdown(spliter: MarkdownTextSplitter, text: str) -> list:
+def post_process_markdown_v1(spliter: MarkdownTextSplitter, text: str) -> list:
     text = text.replace("## Table of Contents", "")
     text = text.replace("Table of Contents", "")
     return spliter.split_text(text)
+
+
+def post_process_markdown(text: str) -> list:
+    text = text.replace("## Table of Contents", "")
+    text = text.replace("Table of Contents", "")
+    # split by "##"
+    chunks = text.split("##")
+    return chunks
 
 from langchain_core.documents import Document
 from uuid import uuid4
@@ -261,24 +277,56 @@ def parent_child_retriever(doc, metadata, embeddings):
     return retriever, vectorstore
 
 
-SUMMARY_PROMPT="""\
+SUMMARY_PROMPT_v1="""\
 You are a financial analyst. You are given a document extracted from a SEC filing. Read the document and summarize it in a few sentences.
 Document:
 {doc}
 Only output your summary.
 """
-def split_markdown_and_summarize(text):
+
+SUMMARY_PROMPT="""\
+You are a financial analyst. You are given a section extracted from financial document. Read the section and give it a descriptive title.
+If there is a table in the section, decide what financial statement the table is, for example, balance sheet, income statement, cash flow statement, or statement of shareholders' equity. You should specify the type of financial statement in the title.
+Section:
+{doc}
+Only output the title.
+"""
+
+def split_markdown_and_summarize_v1(text):
     splitter = MarkdownTextSplitter(chunk_size=4000, chunk_overlap=200)
     chunks = post_process_markdown(splitter, text)
     print(chunks[0][:50])
     print(f"Number of chunks: {len(chunks)}")
     output = []
     for chunk in chunks:
-        prompt = SUMMARY_PROMPT.format(doc=chunk)
+        prompt = SUMMARY_PROMPT_v1.format(doc=chunk)
         summary = generate_answer(args, prompt)
         print("Summary of chunk:", summary)
         output.append((chunk, summary))
     return output
+
+def split_markdown_and_summarize(text):
+    chunks = post_process_markdown(text)
+    print(f"Number of chunks: {len(chunks)}")
+    print("Average chunk size: ", sum([len(chunk) for chunk in chunks]) / len(chunks))
+    print("Minimum chunk size: ", min([len(chunk) for chunk in chunks]))
+
+    output = []
+    for chunk in tqdm(chunks):
+        print("Chunk:\n", chunk[:50])
+        print("Length of chunk: ", len(chunk))
+        if len(chunk) < 100:
+            print("Chunk is too short. Skipping summarization.")
+            output.append((chunk, chunk))
+            continue
+        print("Summarizing chunk........")
+        prompt = SUMMARY_PROMPT_v1.format(doc=chunk)
+        summary = generate_answer(args, prompt)
+        print("Summary of chunk:\n", summary)
+        output.append((chunk, summary))
+        print("="*50)
+    return output
+
 
 def index_chunk_and_summary_into_chroma(vector_store, chunks, metadata):
     """
@@ -343,6 +391,43 @@ def parse_metadata_json(metadata):
         return {}
 
 from transformers import AutoTokenizer
+CHECK_COMPANY="""\
+Here is the list of company names in the knowledge base:
+{company_list}
+
+This is the company of interest: {company}
+
+Think carefully if the company of interest is one of the companies already in the knowledge base. 
+If yes, map the company of interest to the company name in the knowledge base and output the mapped name.
+If not, output the company of interest as is.
+
+Output the company name in {{}}. Example: {{3M}}
+
+Now start!
+"""
+
+def parse_company_name(response):
+    # response {3M}
+    try:
+        company = response.split("{")[1].split("}")[0]
+    except:
+        company = ""
+    return company
+
+def check_company_in_company_list(company, company_list):
+    if company in company_list:
+        print(f"{company} is already in the company list.")
+        return company
+    else:
+        # use LLM to map company to a company in the list
+        print(f"Check if {company} can be mapped to the company list.")
+        prompt = CHECK_COMPANY.format(company_list="\n".join(company_list), company=company)
+        response = generate_answer(args, prompt)
+        parsed = parse_company_name(response)
+        print(f"Mapped {company} to {parsed}")
+        return parsed
+
+
 def generate_metadata_with_llm(args, full_doc):
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     # get the first 5000 characters
@@ -351,15 +436,25 @@ def generate_metadata_with_llm(args, full_doc):
     print(metadata)
     metadata = parse_metadata_json(metadata)
 
-    title = f"{metadata['company']} {metadata['year']} {metadata['quarter']} {metadata['doc_type']}"
-    company_year_quarter = f"{metadata['company']}_{metadata['year']}_{metadata['quarter']}"
-    metadata["doc_title"] = title
-    metadata["company_year_quarter"] = company_year_quarter
-    metadata["doc_length"] = len(tokenizer.encode(full_doc))
-
+    # convert to upper case
     for k, v in metadata.items():
         if isinstance(v, str):
             metadata[k] = v.upper()
+
+    # check if company is already in company list
+    with open(COMPANY_LIST, "r") as f:
+        company_list = f.readlines()
+    company_list = [c.strip().upper() for c in company_list]
+    company = check_company_in_company_list(metadata["company"].upper(), company_list)
+    metadata["company"] = company.upper()
+
+    title = f"{metadata['company']} {metadata['year']} {metadata['quarter']} {metadata['doc_type']}"
+    company_year_quarter = f"{metadata['company']}_{metadata['year']}_{metadata['quarter']}"
+    company_year = f"{metadata['company']}_{metadata['year']}"
+    metadata["doc_title"] = title
+    metadata["company_year_quarter"] = company_year_quarter
+    metadata["company_year"] = company_year
+    metadata["doc_length"] = len(tokenizer.encode(full_doc))
 
     for k, v in metadata.items():   
         print(f"{k}: {v}")
@@ -367,17 +462,36 @@ def generate_metadata_with_llm(args, full_doc):
     return metadata
 
 
-WORKDIR=os.getenv('WORKDIR')
-DATAPATH=os.path.join(WORKDIR, 'datasets/financebench/dataprep/')
+def get_tables_from_store(doc_name):
+    with open(TABLESTORE, "r") as f:
+        table_store = f.readlines()
     
+    table_store = [json.loads(ts) for ts in table_store]
+    tables = []
+
+    comapny = doc_name.split("_")[0]
+    year_quarter = doc_name.split("_")[1]
+    company_year_quarter = f"{comapny}_{year_quarter}"
+    for ts in table_store:
+        if company_year_quarter in ts:
+            tables = ts[company_year_quarter]
+            break
+    print(f"Found {len(tables)} tables for {doc_name}")
+    return tables
+
+WORKDIR=os.getenv('WORKDIR')
+DATAPATH=os.path.join(WORKDIR, 'datasets/financebench_data/dataprep/')
+TABLESTORE=os.path.join(DATAPATH, "table_store.json")
+COMPANY_LIST=os.path.join(DATAPATH, 'new_company_list.txt')
+
 ############## extract and ingest PDFs ###################
 if __name__ == "__main__":
     args = get_args()
 
     df = get_test_data(args)
-    df = df.sample(2)
-    # df = df.loc[df["doc_name"]=="3M_2018_10K"]
-    # df = df.loc[df["company"] != "3M"]
+    #df = df.sample(2)
+    # df = df.loc[df["doc_name"]!="3M_2023Q2_10Q"]
+    df = df.loc[df["company"] != "Coca-Cola"]
     # df = df.loc[df["doc_name"]=="WALMART_2020_10K"]
 
     print("There are {} questions to be answered.".format(df.shape[0]))
@@ -392,18 +506,38 @@ if __name__ == "__main__":
     model = "BAAI/bge-base-en-v1.5"
     embeddings = HuggingFaceEmbeddings(model_name=model)
 
-    vector_store = Chroma(
+    vector_store_text = Chroma(
         collection_name="doc_collection",
         embedding_function=embeddings,
         persist_directory=os.path.join(DATAPATH, args.db_name),
     )
 
+    vector_store_table = Chroma(
+        collection_name="table_collection",
+        embedding_function=embeddings,
+        persist_directory=os.path.join(DATAPATH, args.db_name),
+    )
+
+    if os.path.exists(COMPANY_LIST):
+        print("Company list exists, reading the list...")
+        with open(COMPANY_LIST, "r") as f:
+            company_list = f.readlines()
+        company_list = [c.strip().upper() for c in company_list]
+    else:
+        company_list = []
+        with open(COMPANY_LIST, "w") as f:
+            f.write("")
+
     for doc_name, doc_path in zip(docs, doc_paths):
         if args.read_processed:
+            # read full doc
             doc_filepath = os.path.join(DATAPATH, doc_name+".md")
             with open(doc_filepath, "r") as f:
                 full_doc = f.read()
                 print(f"Length of {doc_name}: {len(full_doc)}")
+            # read tables
+            tables = get_tables_from_store(doc_name)
+            
         else:
             print("Processing document with docling: ", doc_name)
             full_doc, conv_res=process_pdf_docling(doc_converter, doc_path)
@@ -416,28 +550,38 @@ if __name__ == "__main__":
             print("Generating metadata........")
             metadata = generate_metadata_with_llm(args, full_doc)
             company = metadata["company"]
+            if company not in company_list:
+                company_list.append(company.upper())
+                with open(COMPANY_LIST, "a") as f:
+                    f.write(company.upper())
+                    f.write("\n")
+            print(f"Metadata for {doc_name}: {metadata}")
             print("Metadata generated for ", doc_name)
         else:
             company_year = doc_name.split("_")[0] + "_" + doc_name.split("_")[1]
             print("Company year: ", company_year)
             metadata = {"doc_name": doc_name, "company_year": company_year}
         
-        # if args.chunk_option == "chunk_summarize":
-        #     print("Chunking and summarizing document........")
-        #     chunks = split_markdown_and_summarize(full_doc)
-        #     print("Chunking and summarizing completed for ", doc_name)
-        #     print("Indexing into vector store........")
-        #     vector_store = index_chunk_and_summary_into_chroma(vector_store, chunks, metadata)
-        #     print("="*50)
-        # elif args.chunk_option == "text_table":
-        #     print("Processing tables........")
-        #     tables = process_tables(conv_res, args)
-        #     print("Table processing completed for ", doc_name)
-        #     print("Indexing into vector store........")            
-        #     vector_store = add_docs_to_vectorstore(full_doc, tables, metadata, vector_store)
-        #     print("="*50)
-        # else:
-        #     raise ValueError("Invalid chunk option. Please choose either 'chunk_summarize' or 'text_table'.")
+        if args.chunk_option == "chunk_summarize":
+            print("Chunking and summarizing document........")
+            chunks = split_markdown_and_summarize(full_doc)
+            print("Chunking and summarizing completed for ", doc_name)
+            print("Indexing into vector store........")
+            vector_store_text = index_chunk_and_summary_into_chroma(vector_store_text, chunks, metadata)
+            print("Processing tablee....")
+            tables_summaries = summarize_all_tables(tables, args)
+            print("Indexing into table vector store........")
+            vector_store_table = index_tables_into_chroma(vector_store_table, tables_summaries, metadata)
+            print("="*50)
+        elif args.chunk_option == "text_table":
+            print("Processing tables........")
+            tables = process_tables(conv_res, args)
+            print("Table processing completed for ", doc_name)
+            print("Indexing into vector store........")            
+            vector_store = add_docs_to_vectorstore(full_doc, tables, metadata, vector_store)
+            print("="*50)
+        else:
+            raise ValueError("Invalid chunk option. Please choose either 'chunk_summarize' or 'text_table'.")
 
 
 
