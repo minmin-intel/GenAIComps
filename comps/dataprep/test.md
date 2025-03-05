@@ -1,6 +1,6 @@
 ## Start redis db
 ```bash
-docker run -p 6379:6379 -p 8001:8001 -d redis/redis-stack:7.2.0-v9
+docker run --name redis-db -p 6379:6379 -p 8001:8001 -d redis/redis-stack:7.2.0-v9
 ```
 
 ## env setup
