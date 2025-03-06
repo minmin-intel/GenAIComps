@@ -235,13 +235,15 @@ def get_index_name(doc_type: str, metadata: dict):
 def save_doc_title(doc_title: str, metadata: dict):
     print("Saving doc title....")
     embedder = get_embedder()
-    _, keys = Redis.from_texts_return_keys(
-            texts=[doc_title],
-            embedding=embedder,
-            index_name="titles",
-            redis_url=REDIS_URL_VECTOR,
-            metadatas=[metadata],
-        )
+    vector_store = get_vectorstore("titles")
+    keys = vector_store.add_texts([doc_title], [metadata])
+    # _, keys = Redis.from_texts_return_keys(
+    #         texts=[doc_title],
+    #         embedding=embedder,
+    #         index_name="titles",
+    #         redis_url=REDIS_URL_VECTOR,
+    #         metadatas=[metadata],
+    #     )
     return keys
 
 def parse_doc_and_extract_metadata(filename: str):
@@ -303,13 +305,15 @@ def save_chunk(chunk: tuple, metadata: dict, doc_type="chunks"):
     print(f"Index name: {index_name}")
     print("Embedding summary and saving to vector db....")
     # embed summary and save to vector db
-    _, key = Redis.from_texts_return_keys(
-            texts=[chunk_summary],
-            embedding=embedder,
-            index_name=index_name,
-            redis_url=REDIS_URL_VECTOR,
-            metadatas=[metadata],
-        )
+    vector_store = get_vectorstore(index_name)
+    key = vector_store.add_texts([chunk_summary], [metadata])
+    # _, key = Redis.from_texts_return_keys(
+    #         texts=[chunk_summary],
+    #         embedding=embedder,
+    #         index_name=index_name,
+    #         redis_url=REDIS_URL_VECTOR,
+    #         metadatas=[metadata],
+    #     )
     
     # save chunk_content to kvstore
     print("Saving to kvstore....")
@@ -517,20 +521,33 @@ def bm25_search_broad(query, company, year, quarter, k=10, doc_type="chunks"):
     else:
         return []
 
+
+def set_filter(metadata_filter):
+    # metadata_filter: tuple of (key, value)
+    from redisvl.query.filter import Text
+    key = metadata_filter[0]
+    value = metadata_filter[1]
+    filter_condition = Text(key) == value
+    return filter_condition
+
 def similarity_search(vector_store, k, query, company, year, quarter=None):
     query1 = f"{query} {year} {quarter}"
-    docs1 = vector_store.similarity_search(query1, k=k, filter=(RedisText("company") == company))
+    filter_condition = set_filter(("company", company))
+    docs1 = vector_store.similarity_search(query1, k=k, filter=filter_condition)
     print(f"Similarity search: Found {len(docs1)} docs with company filter and query: {query1}")
 
-    docs = vector_store.similarity_search(query, k=k, filter=(RedisText("company_year_quarter")==f"{company}_{year}_{quarter}"))
+    filter_condition = set_filter(("company_year_quarter", f"{company}_{year}_{quarter}"))
+    docs = vector_store.similarity_search(query, k=k, filter=filter_condition)
     
     if not docs: # if no relevant document found, relax the filter
         print("No relevant document found with company, year and quarter filter, only search with comany and year")
-        docs = vector_store.similarity_search(query, k=k, filter=(RedisText("company_year")==f"{company}_{year}"))
+        filter_condition = set_filter(("company_year", f"{company}_{year}"))
+        docs = vector_store.similarity_search(query, k=k, filter=filter_condition)
         
     if not docs: # if no relevant document found, relax the filter
         print("No relevant document found with company_year filter, only serach with company.....")
-        docs = vector_store.similarity_search(query, k=k, filter=(RedisText("company")==f"{company}"))
+        filter_condition = set_filter(("company", company))
+        docs = vector_store.similarity_search(query, k=k, filter=filter_condition)
     
     print(f"Similarity search: Found {len(docs)} docs with filter and query: {query}")
 
@@ -614,7 +631,6 @@ def get_vectorstore(index_name):
             {"name": "doc_type", "type": "text"},
             {"name": "doc_title", "type": "text"},
             {"name": "doc_id", "type": "text"},
-            {"name": "doc_type", "type": "text"},
             {"name": "company_year", "type": "text"},
             {"name": "company_year_quarter", "type": "text"},
         ],
@@ -697,7 +713,11 @@ if __name__ == "__main__":
         search_metadata = ("company", company)
         # get_docs_matching_metadata(search_metadata, collection_name)
         # bm25_search("revenue", search_metadata, company, k=2)
-        get_context_bm25_llm("revenue", company, year, quarter)
+        # get_context_bm25_llm("revenue", company, year, quarter)
+        vector_store = get_vectorstore(collection_name)
+        k = 2
+        query = "revenue"
+        similarity_search(vector_store, k, query, company, year, quarter)
         
         
         # query = "3M revenue in 2018"
