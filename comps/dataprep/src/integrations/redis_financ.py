@@ -157,6 +157,7 @@ def generate_metadata_with_llm(full_doc):
     title = f"{metadata['company']} {metadata['year']} {metadata['quarter']} {metadata['doc_type']}"
     company_year_quarter = f"{metadata['company']}_{metadata['year']}_{metadata['quarter']}"
     metadata["doc_title"] = title
+    metadata["company_year"]= f"{metadata['company']}_{metadata['year']}"
     metadata["company_year_quarter"] = company_year_quarter
     # metadata["doc_length"] = len(tokenizer.encode(full_doc))
 
@@ -234,11 +235,10 @@ def get_index_name(doc_type: str, metadata: dict):
 def save_doc_title(doc_title: str, metadata: dict):
     print("Saving doc title....")
     embedder = get_embedder()
-    index_name = get_index_name("titles", metadata)
     _, keys = Redis.from_texts_return_keys(
             texts=[doc_title],
             embedding=embedder,
-            index_name=index_name,
+            index_name="titles",
             redis_url=REDIS_URL_VECTOR,
             metadatas=[metadata],
         )
@@ -270,7 +270,6 @@ def split_markdown_and_summarize_save(text, metadata):
 
     keys = []
     for chunk in tqdm(chunks):
-        print("Chunk:\n", chunk[:50])
         print("Length of chunk: ", len(chunk))
         if len(chunk) < 100:
             print("Chunk is too short. Skipping summarization.")
@@ -353,11 +352,8 @@ def post_process_html(full_doc, doc_title):
 
 def ingest_financial_data(filename: str):
     """
-    4 collections:
-    chunks
-    tables
-    doc_title
-    full_doc
+    1 vector store - multiple collections: chunks/tables (embeddings for summaries), doc_titles
+    1 kv store - multiple collections: full doc, chunks, tables
     """
     file_ids = []
 
@@ -392,6 +388,8 @@ def ingest_financial_data(filename: str):
 ################ retrieval functions ####################
 from langchain_community.retrievers import BM25Retriever
 from langchain_community.vectorstores.redis import RedisText
+from langchain_redis import RedisConfig, RedisVectorStore
+
 
 ANSWER_PROMPT = """\
 You are a financial analyst. Read the documents below and answer the question.
@@ -414,10 +412,15 @@ def get_company_list():
 def get_company_name_in_kb(company, company_list):
     if not company_list:
         return "Database is empty."
+    
+    company = company.upper()
+    if company in company_list:
+        return company
+    
     prompt = COMPANY_NAME_PROMPT.format(company_list=company_list, company=company)
     response = generate_answer(prompt)
     if "NONE" in response.upper():
-        return "Cannot find company name in knowledge base."
+        return f"Cannot find {company} in knowledge base."
     else:
         return response.strip("{}").upper()
 
@@ -441,9 +444,8 @@ def get_docs_matching_metadata(metadata, collection_name):
     print(f"Number of docs found with search_metadata {metadata}: {len(matching_docs)}")
     return matching_docs
     
-   
-
 def convert_docs(docs):
+    # docs: list of dicts
     converted_docs_content = []
     converted_docs_summary = []
     for doc in docs:
@@ -465,11 +467,11 @@ def convert_docs(docs):
             )
         converted_docs_content.append(converted_content)
         converted_docs_summary.append(converted_summary)
-
     return converted_docs_content, converted_docs_summary
 
 def bm25_search(query, metadata, company, doc_type="chunks", k=10):
     collection_name = f"{doc_type}_{company}"
+    print("Collection name: ", collection_name)
 
     docs = get_docs_matching_metadata(metadata, collection_name)
 
@@ -490,7 +492,7 @@ def bm25_search(query, metadata, company, doc_type="chunks", k=10):
     return results
 
 
-def bm25_search_broad(query, company, year, quarter, vector_store, k=10, doc_type="chunks"):
+def bm25_search_broad(query, company, year, quarter, k=10, doc_type="chunks"):
     # search with company filter, but query is query_company_quarter
     metadata = ("company",f"{company}")
     query1 = f"{query} {year} {quarter}"
@@ -503,11 +505,11 @@ def bm25_search_broad(query, company, year, quarter, vector_store, k=10, doc_typ
     if not docs:
         print("BM25: No docs found with company, year and quarter filter, only search with company and year filter")
         metadata = ("company_year",f"{company}_{year}")
-        docs = bm25_search(query, metadata, vector_store, k=k, doc_type=doc_type)
+        docs = bm25_search(query, metadata, company, k=k, doc_type=doc_type)
     if not docs:
         print("BM25: No docs found with company and year filter, only search with company filter")
         metadata = ("company",f"{company}")
-        docs = bm25_search(query, metadata, vector_store, k=k, doc_type=doc_type)
+        docs = bm25_search(query, metadata, company, k=k, doc_type=doc_type)
 
     docs = docs + docs1
     if docs:
@@ -518,9 +520,10 @@ def bm25_search_broad(query, company, year, quarter, vector_store, k=10, doc_typ
 def similarity_search(vector_store, k, query, company, year, quarter=None):
     query1 = f"{query} {year} {quarter}"
     docs1 = vector_store.similarity_search(query1, k=k, filter=(RedisText("company") == company))
+    print(f"Similarity search: Found {len(docs1)} docs with company filter and query: {query1}")
 
     docs = vector_store.similarity_search(query, k=k, filter=(RedisText("company_year_quarter")==f"{company}_{year}_{quarter}"))
-
+    
     if not docs: # if no relevant document found, relax the filter
         print("No relevant document found with company, year and quarter filter, only search with comany and year")
         docs = vector_store.similarity_search(query, k=k, filter=(RedisText("company_year")==f"{company}_{year}"))
@@ -529,6 +532,8 @@ def similarity_search(vector_store, k, query, company, year, quarter=None):
         print("No relevant document found with company_year filter, only serach with company.....")
         docs = vector_store.similarity_search(query, k=k, filter=(RedisText("company")==f"{company}"))
     
+    print(f"Similarity search: Found {len(docs)} docs with filter and query: {query}")
+
     docs = docs + docs1
     if not docs:
         return []
@@ -556,11 +561,17 @@ def get_content(doc):
         )
     """
     if "type" in doc.metadata and doc.metadata["type"] == "summary":
+        print("BM25 retrieved doc...")
         content = doc.metadata["content"]
-    elif type in doc.metadata and doc.metadata["type"] == "content":
+    elif "type" in doc.metadata and doc.metadata["type"] == "content":
+        print("BM25 retrieved doc...")
         content = doc.page_content
     else:
+        print("Dense retriever doc...")
+        print(doc.metadata)
+        print(doc.id)
         doc_id = doc.metadata["doc_id"]
+        # doc_summary=doc.page_content
         kvstore = RedisKVStore(redis_uri=REDIS_URL_KV)
         collection_name = get_index_name(doc.metadata["doc_type"], doc.metadata)
         result = kvstore.get(doc_id, collection_name)
@@ -592,29 +603,54 @@ def parse_response(response):
         company = ""
     return company
 
+def get_vectorstore(index_name):
+    config = RedisConfig(
+        index_name=index_name,
+        redis_url=REDIS_URL_VECTOR,
+        metadata_schema=[
+            {"name": "company", "type": "text"},
+            {"name": "year", "type": "text"},
+            {"name": "quarter", "type": "text"},
+            {"name": "doc_type", "type": "text"},
+            {"name": "doc_title", "type": "text"},
+            {"name": "doc_id", "type": "text"},
+            {"name": "doc_type", "type": "text"},
+            {"name": "company_year", "type": "text"},
+            {"name": "company_year_quarter", "type": "text"},
+        ],
+    )
+    embedder = get_embedder()
+    vector_store = RedisVectorStore(embedder, config=config)
+    return vector_store
+
 def get_context_bm25_llm(query, company, year, quarter = ""):
-    k = 5
+    k = 2
     
     company_list = get_company_list()
     company = get_company_name_in_kb(company, company_list)
-    if "Cannot find company name" in company or "Database is empty" in company:
+    if "Cannot find" in company or "Database is empty" in company:
         return company
     
+    print(f"Company: {company}")
     embedder = get_embedder()
 
     # chunks
-    vector_store = Redis(embedding=embedder, index_name="chunks", redis_url=REDIS_URL_VECTOR)
-    chunks_bm25 = bm25_search_broad(query, company, year, quarter, vector_store, k=k, doc_type="chunk")
+    index_name=f"chunks_{company}"
+    vector_store = get_vectorstore(index_name)
+    chunks_bm25 = bm25_search_broad(query, company, year, quarter, k=k, doc_type="chunks")
     chunks_sim = similarity_search(vector_store, k, query, company, year, quarter)
     chunks = chunks_bm25 + chunks_sim
     
     # tables
-    vector_store_table = Redis(embedding=embedder, index_name="tables", redis_url=REDIS_URL_VECTOR)
-
-    # get tables matching metadata
-    tables_bm25 = bm25_search_broad(query, company, year, quarter, vector_store_table, k=k, doc_type="table")
-    tables_sim = similarity_search(vector_store_table, k, query, company, year, quarter)
-    tables = tables_bm25 + tables_sim
+    try:
+        index_name=f"tables_{company}"
+        vector_store_table = get_vectorstore(index_name)
+        # get tables matching metadata
+        tables_bm25 = bm25_search_broad(query, company, year, quarter, k=k, doc_type="tables")
+        tables_sim = similarity_search(vector_store_table, k, query, company, year, quarter)
+        tables = tables_bm25 + tables_sim
+    except:
+        tables = []
 
     # get unique results
     context = get_unique_docs(chunks+tables)
@@ -660,7 +696,8 @@ if __name__ == "__main__":
         collection_name=f"chunks_{company}"
         search_metadata = ("company", company)
         # get_docs_matching_metadata(search_metadata, collection_name)
-        bm25_search("revenue", search_metadata, company, k=2)
+        # bm25_search("revenue", search_metadata, company, k=2)
+        get_context_bm25_llm("revenue", company, year, quarter)
         
         
         # query = "3M revenue in 2018"
