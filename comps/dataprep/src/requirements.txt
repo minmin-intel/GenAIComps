@@ -14,6 +14,8 @@ huggingface_hub
 ipython
 langchain
 langchain-community
+langchain-redis
+docling
 langchain-elasticsearch
 langchain-experimental
 langchain-openai

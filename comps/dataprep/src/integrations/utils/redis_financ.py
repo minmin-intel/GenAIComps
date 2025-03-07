@@ -1,6 +1,5 @@
 from langchain_community.embeddings import HuggingFaceBgeEmbeddings
 from langchain_huggingface import HuggingFaceEndpointEmbeddings
-from langchain_community.vectorstores import Redis
 from langchain_core.documents import Document
 from docling.document_converter import DocumentConverter
 from openai import OpenAI
@@ -8,14 +7,17 @@ import os
 import json
 import uuid
 from tqdm import tqdm
-from utils.redis_kv import RedisKVStore
+from comps.dataprep.src.integrations.utils.redis_kv import RedisKVStore
 
+# Embedding model
 EMBED_MODEL = os.getenv("EMBED_MODEL", "BAAI/bge-base-en-v1.5")
-# TEI Embedding endpoints
 TEI_EMBEDDING_ENDPOINT = os.getenv("TEI_EMBEDDING_ENDPOINT", "")
 
+# Redis URL
 REDIS_URL_VECTOR = os.getenv("REDIS_URL_VECTOR", "redis://localhost:6379/")
 REDIS_URL_KV = os.getenv("REDIS_URL_KV", "redis://localhost:6380/")
+
+# LLM config
 LLM_MODEL=os.getenv("LLM_MODEL", "meta-llama/Llama-3.3-70B-Instruct")
 LLM_ENDPOINT=os.getenv("LLM_ENDPOINT", "http://localhost:8086")
 MAX_TOKENS = os.getenv("MAX_TOKENS", 1024)
@@ -284,7 +286,7 @@ def split_markdown_and_summarize_save(text, metadata):
         if len(chunk) < 100:
             print("Chunk is too short. Skipping summarization.")
             key = save_chunk((chunk, chunk), metadata)
-            keys.append(key)
+            keys.extend(key)
             continue
         print("Summarizing chunk........")
         prompt = CHUNK_SUMMARY_PROMPT.format(doc=chunk)
@@ -361,40 +363,6 @@ def post_process_html(full_doc, doc_title):
             final_doc += f"##{chunk}"
     return final_doc
 
-def ingest_financial_data(filename: str):
-    """
-    1 vector store - multiple collections: chunks/tables (embeddings for summaries), doc_titles
-    1 kv store - multiple collections: full doc, chunks, tables
-    """
-    file_ids = []
-
-    if filename.endswith(".pdf") or "https://" in filename or filename.endswith(".md"):
-        if not filename.endswith(".md"):
-            conv_res, full_doc, metadata = parse_doc_and_extract_metadata(filename)
-
-        if "https://" in filename:
-            full_doc = post_process_html(full_doc, metadata["doc_title"])
-
-        # save company name
-        metadata = save_company_name(metadata)
-
-        # save full doc
-        save_full_doc(full_doc, metadata)
-
-        # save doc_title
-        doc_title = metadata["doc_title"]
-        keys = save_doc_title(doc_title, metadata)
-        file_ids.extend(keys)
-      
-        # chunk and save
-        keys = split_markdown_and_summarize_save(full_doc, metadata)
-        file_ids.extend(keys)
-
-        # process tables and save
-        keys = process_tables(conv_res, metadata)
-        file_ids.extend(keys)
-    else:
-        raise ValueError("File format not supported.")
 
 ################ retrieval functions ####################
 from langchain_community.retrievers import BM25Retriever

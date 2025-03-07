@@ -1,0 +1,21 @@
+services:
+  dataprep-redis-service:
+    image: opea/dataprep:mh
+    container_name: dataprep-redis-server
+    volumes:
+      - $WORKDIR/GenAIComps/comps:/home/user/comps
+    ports:
+      - "6007:5000"
+      - "6008:6008"
+      - "6009:6009"
+    environment:
+      no_proxy: ${no_proxy}
+      http_proxy: ${http_proxy}
+      https_proxy: ${https_proxy}
+      DATAPREP_COMPONENT_NAME: ${DATAPREP_COMPONENT_NAME}
+      REDIS_URL_VECTOR: ${REDIS_URL_VECTOR}
+      REDIS_URL_KV: ${REDIS_URL_KV}
+      # TEI_ENDPOINT: ${TEI_EMBEDDING_ENDPOINT}
+      LLM_ENDPOINT: ${LLM_ENDPOINT}
+      HUGGINGFACEHUB_API_TOKEN: ${HUGGINGFACEHUB_API_TOKEN}
+      LOGFLAG: true
