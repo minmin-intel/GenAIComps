@@ -285,8 +285,9 @@ class OpeaRedisDataprepFinance(OpeaComponent):
             uploaded_files = []
 
             for file in files:
-                if not file.filename.lower().endswith(".pdf") or not file.filename.lower().endswith(".md"):
-                    raise HTTPException(status_code=400, detail="Only PDF files and Markdown files are supported.")
+                print(file.filename)
+                if not file.filename.lower().endswith(".pdf"):
+                    raise HTTPException(status_code=400, detail="Only PDF files are supported.")
                 encode_file = encode_filename(file.filename)
                 doc_id = "file:" + encode_file
                 if logflag:
@@ -325,8 +326,7 @@ class OpeaRedisDataprepFinance(OpeaComponent):
             for link in link_list:
                 if not link.startswith("http"):
                     raise HTTPException(status_code=400, detail=f"Link {link} is not a valid URL.")
-                encoded_link = encode_filename(link)
-                doc_id = "file:" + encoded_link + ".txt"
+                doc_id = "file:" + link
                 if logflag:
                     logger.info(f"[ redis ingest] processing link {doc_id}")
 
@@ -342,10 +342,6 @@ class OpeaRedisDataprepFinance(OpeaComponent):
                     raise HTTPException(
                         status_code=400, detail=f"Uploaded link {link} already exists. Please change another link."
                     )
-
-                save_path = upload_folder + encoded_link + ".txt"
-                # content = parse_html_new([link], chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-                # await save_content_to_local_disk(save_path, content)
                 await ingest_financial_data(link)
             if logflag:
                 logger.info(f"[ redis ingest] Successfully saved link list {link_list}")
