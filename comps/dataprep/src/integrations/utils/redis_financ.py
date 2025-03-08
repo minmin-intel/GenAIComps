@@ -9,8 +9,17 @@ import uuid
 from tqdm import tqdm
 from comps.dataprep.src.integrations.utils.redis_kv import RedisKVStore
 from comps import CustomLogger
-
 logger = CustomLogger("redis_dataprep_finance_data")
+# try: 
+#     from comps.dataprep.src.integrations.utils.redis_kv import RedisKVStore
+#     from comps import CustomLogger
+#     logger = CustomLogger("redis_dataprep_finance_data")
+# except:
+#     from redis_kv import RedisKVStore
+#     import logging
+#     logger = logging.getLogger(__name__)
+#     logging.basicConfig(filename='test.log', level=logging.INFO)
+
 
 # Embedding model
 EMBED_MODEL = os.getenv("EMBED_MODEL", "BAAI/bge-base-en-v1.5")
@@ -149,30 +158,38 @@ def generate_answer(prompt):
 
     # get response
     response = completion.choices[0].message.content
-
+    logger.info(f"LLM Response: {response}")
     return response
 
-def generate_metadata_with_llm(full_doc):
-    # get the first 10000 characters
-    prompt = METADATA_PROMPT.format(document=full_doc[:10000])
-    metadata = generate_answer(prompt)
-    logger.info(metadata)
-    metadata = parse_metadata_json(metadata)
+def generate_metadata(full_doc):
+    # split the full doc into chunks
+    chunks = split_text(full_doc)
+    metadata_candidates = []
+    for chunk in chunks[:10]:
+        prompt = METADATA_PROMPT.format(document=chunk)
+        metadata = generate_answer(prompt)
+        print("LLM extracted metadata: ", metadata)
+        metadata = parse_metadata_json(metadata)
+        if metadata:
+            if metadata["company"] and metadata["year"]:
+                metadata_candidates.append(metadata)
+    if metadata_candidates:
+        # majority vote
+        final_metadata = {}
+        for k in metadata_candidates[0].keys():
+            values = [metadata[k] for metadata in metadata_candidates]
+            final_metadata[k] = max(set(values), key=values.count)
+        for k, v in final_metadata.items():
+            if isinstance(v, str):
+                final_metadata[k] = v.upper()
 
-    title = f"{metadata['company']} {metadata['year']} {metadata['quarter']} {metadata['doc_type']}"
-    company_year_quarter = f"{metadata['company']}_{metadata['year']}_{metadata['quarter']}"
-    metadata["doc_title"] = title
-    metadata["company_year"]= f"{metadata['company']}_{metadata['year']}"
-    metadata["company_year_quarter"] = company_year_quarter
+        for k, v in final_metadata.items():   
+            logger.info(f"{k}: {v}")
+        
+    else:
+        final_metadata = {}
+    return final_metadata
 
-    for k, v in metadata.items():
-        if isinstance(v, str):
-            metadata[k] = v.upper()
-
-    for k, v in metadata.items():   
-        logger.info(f"{k}: {v}")
-
-    return metadata
 
 def get_tokenizer():
     from transformers import AutoTokenizer
@@ -194,14 +211,14 @@ def save_company_name(metadata: dict):
     # get existing companies from KV store
     # collection: company_list
     # key: company
-    logger.info("Saving company name....")
+    logger.info("[save_company_name] Saving company name....")
     kvstore = RedisKVStore(redis_uri=REDIS_URL_KV)
     company_list_dict = kvstore.get("company", "company_list")
     if company_list_dict:
         company_list = company_list_dict["company"]
-        logger.info("Found existing company list: ", company_list)
+        logger.info(f"[save_company_name] Found existing company list: {company_list}")
     else:
-        logger.info("No existing company list found. Creating new list.")
+        logger.info("[save_company_name] No existing company list found. Creating new list.")
         company_list = []
         company_list.append(metadata["company"])
         kvstore.put("company", {"company": company_list}, "company_list")
@@ -210,22 +227,22 @@ def save_company_name(metadata: dict):
     new_company = metadata["company"]
     # decide if new_company already in company_list
     if new_company in company_list:
-        logger.info("Company already in company list.")
+        logger.info("[save_company_name] Company already in company list.")
         # no need to change metadata["company"]
         pass
     else:
         # use LLM to decide if new_company is alias of existing company
-        logger.info("Use LLM to decide if company is alias of existing company.")
+        logger.info("[save_company_name] Use LLM to decide if company is alias of existing company.")
         prompt = COMPANY_NAME_PROMPT.format(company_list=company_list, company=new_company)
         response = generate_answer(prompt)
         if "NONE" in response.upper():
-            logger.info(f"Company is not in company list. Add {new_company} to company list.")
+            logger.info(f"[save_company_name] Company {new_company} is not in company list. Add {new_company} to company list.")
             # add new_company to company_list
             company_list.append(new_company)
             kvstore.put("company", {"company": company_list}, "company_list")
         else:
             existing_company = response.strip("{}").upper()
-            logger.info(f"Company is alias of existing company. Map {new_company} to {existing_company}.")
+            logger.info(f"[save_company_name] Company is alias of existing company. Map {new_company} to {existing_company}.")
             metadata["company"] = existing_company
 
     return metadata
@@ -262,7 +279,7 @@ def parse_doc_and_extract_metadata(filename: str):
 
     # get doc title and metadata with llm
     logger.info("[parse_doc_and_extract_metadata] Extracting metadata....")
-    metadata = generate_metadata_with_llm(full_doc)
+    metadata = generate_metadata(full_doc)
     return conv_res, full_doc, metadata
 
 
@@ -271,24 +288,17 @@ def split_markdown_and_summarize_save(text, metadata):
     text = post_process_text(text)
     chunks = split_text(text)
     logger.info(f"Number of chunks: {len(chunks)}")
-    logger.info("Average chunk size: ", sum([len(chunk) for chunk in chunks]) / len(chunks))
-    logger.info("Minimum chunk size: ", min([len(chunk) for chunk in chunks]))
 
     keys = []
     for chunk in tqdm(chunks):
-        logger.info("Length of chunk: ", len(chunk))
         if len(chunk) < 100:
-            logger.info("Chunk is too short. Skipping summarization.")
             key = save_chunk((chunk, chunk), metadata)
             keys.extend(key)
             continue
-        logger.info("Summarizing chunk........")
         prompt = CHUNK_SUMMARY_PROMPT.format(doc=chunk)
         summary = generate_answer(prompt)
-        logger.info("Summary of chunk:\n", summary)
         key = save_chunk((chunk, summary), metadata)
         keys.extend(key)
-        logger.info("="*50)
     return keys
 
 
@@ -330,7 +340,7 @@ def get_table_summary_with_llm(table_md):
 def process_tables(conv_res, metadata):
     logger.info("Processing tables....")
     keys = []
-    for table_ix, table in enumerate(conv_res.document.tables):
+    for table in tqdm(conv_res.document.tables):
         table_md = table.export_to_markdown()
         context = get_table_summary_with_llm(table_md)
         key = save_chunk((table_md, context), metadata, doc_type="tables")
@@ -341,11 +351,9 @@ def post_process_html(full_doc, doc_title):
     logger.info("Post processing extracted webpage....")
     final_doc = ""
     chunks = split_text(full_doc)
-    for chunk in chunks:
+    for chunk in tqdm(chunks):
         prompt = IS_RELEVANT_PROMPT.format(chunk=chunk, doc_title=doc_title)
         llm_res = generate_answer(prompt)
-        logger.info(f"Chunk: {chunk[:100]}...")
-        logger.info(f"LLM Response: {llm_res}")
         if "YES" in llm_res.upper():
             final_doc += f"##{chunk}"
     return final_doc
@@ -690,18 +698,31 @@ if __name__ == "__main__":
     if args.option == "ingest":
         WORKDIR = os.getenv("WORKDIR")
         DATAPATH= os.path.join(WORKDIR, "datasets/financebench/dataprep")
-        # files = ["3M_2018_10K-table-7.md"]
-        files = ["https://www.fool.com/earnings/call-transcripts/2025/03/04/progressive-pgr-q4-2024-earnings-call-transcript/"]
-        for f in files:
-            logger.info("Ingesting file:", f)
-            if "https://" in f:
-                ingest_financial_data(f)
-            else:
-                if not os.path.exists(os.path.join(DATAPATH, f)):
-                    logger.info("File not found:", f)
-                    continue
-                ingest_financial_data(os.path.join(DATAPATH, f))
-            logger.info("="*50)
+        # link="https://investors.3m.com/financials/sec-filings/content/0000066740-24-000101/0000066740-24-000101.pdf"
+        link = "https://www.fool.com/earnings/call-transcripts/2025/03/04/progressive-pgr-q4-2024-earnings-call-transcript/"
+        files = [link]
+        # for f in files:
+        #     print("Ingesting file:", f)
+        #     if "https://" in f:
+        #         conv_res, full_doc, metadata = parse_doc_and_extract_metadata(f)
+        #     else:
+        #         if not os.path.exists(os.path.join(DATAPATH, f)):
+        #             print("File not found:", f)
+        #             continue
+        #         conv_res, full_doc, metadata = parse_doc_and_extract_metadata(os.path.join(DATAPATH, f))
+        #     logger.info("="*50)
+        #     print("Metadata:", metadata)
+        #     print("="*50)
+        # filename = "JPMORGAN_2022Q2_10Q.md"
+        # filename = "3M_2022_10K.md"
+        # filename = "PEPSICO_2023_8K_dated-2023-05-30.md"
+        filename = "PEPSICO_2023Q1_EARNINGS.md"
+        full_doc_path = os.path.join(DATAPATH, filename)
+        # full_doc_path = "full_doc.md"
+        with open(full_doc_path, "r") as f:
+            full_doc = f.read()
+        metadata = generate_metadata(full_doc)
+        print("Metadata:", metadata)
 
     if args.option == "retrieve":
         # # retrieval

@@ -107,7 +107,7 @@ def store_by_id(client, key, value):
     if logflag:
         logger.info(f"[ store by id ] storing ids of {key}")
     try:
-        client.add_document(doc_id="file:" + key, file_name=key, key_ids=value)
+        client.add_document(doc_id=key, file_name=key, key_ids=value)
         if logflag:
             logger.info(f"[ store by id ] store document success. id: file:{key}")
     except Exception as e:
@@ -172,15 +172,14 @@ def save_file_ids_to_filekey_index(file_name, file_ids):
         raise HTTPException(status_code=500, detail=f"Fail to store chunks of file {file_name}.")
 
 
-async def ingest_financial_data(filename: str):
+async def ingest_financial_data(filename: str, doc_id: str):
     """
     1 vector store - multiple collections: chunks/tables (embeddings for summaries), doc_titles
     1 kv store - multiple collections: full doc, chunks, tables
     """
     file_ids = []
 
-    if not filename.endswith(".md"):
-        conv_res, full_doc, metadata = parse_doc_and_extract_metadata(filename)
+    conv_res, full_doc, metadata = parse_doc_and_extract_metadata(filename)
 
     if "https://" in filename:
         full_doc = post_process_html(full_doc, metadata["doc_title"])
@@ -203,7 +202,7 @@ async def ingest_financial_data(filename: str):
     # process tables and save
     keys = process_tables(conv_res, metadata)
     file_ids.extend(keys)
-    save_file_ids_to_filekey_index(filename, file_ids)
+    save_file_ids_to_filekey_index(doc_id, file_ids)
     
 
 @OpeaComponentRegistry.register("OPEA_DATAPREP_REDIS_FIANANCE")
@@ -309,7 +308,7 @@ class OpeaRedisDataprepFinance(OpeaComponent):
 
                 save_path = upload_folder + encode_file
                 await save_content_to_local_disk(save_path, file)
-                await ingest_financial_data(save_path)
+                await ingest_financial_data(save_path, doc_id)
                 uploaded_files.append(save_path)
                 if logflag:
                     logger.info(f"[ redis ingest] Successfully saved file {save_path}")
@@ -342,7 +341,7 @@ class OpeaRedisDataprepFinance(OpeaComponent):
                     raise HTTPException(
                         status_code=400, detail=f"Uploaded link {link} already exists. Please change another link."
                     )
-                await ingest_financial_data(link)
+                await ingest_financial_data(link, doc_id)
             if logflag:
                 logger.info(f"[ redis ingest] Successfully saved link list {link_list}")
             return {"status": 200, "message": "Data preparation succeeded"}
