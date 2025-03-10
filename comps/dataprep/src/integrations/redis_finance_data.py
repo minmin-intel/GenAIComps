@@ -22,7 +22,7 @@ from comps.dataprep.src.utils import (
     remove_folder_with_ignore,
     save_content_to_local_disk,
 )
-
+from comps.dataprep.src.integrations.utils.redis_kv import RedisKVStore
 from comps.dataprep.src.integrations.utils.redis_financ import *
 
 logger = CustomLogger("redis_dataprep_finance_data")
@@ -172,6 +172,46 @@ def save_file_ids_to_filekey_index(file_name, file_ids):
         raise HTTPException(status_code=500, detail=f"Fail to store chunks of file {file_name}.")
 
 
+def drop_index_from_kvstore(index_name):
+    redis_pool = redis.ConnectionPool.from_url(REDIS_URL_KV)
+    client = redis.Redis(connection_pool=redis_pool)
+    try:
+        client.delete(index_name)
+        if logflag:
+            logger.info(f"[ drop index ] index {index_name} deleted")
+        return True
+    except Exception as e:
+        if logflag:
+            logger.info(f"[ drop index ] index {index_name} delete failed: {e}")
+        return False
+    
+def drop_record_from_kvstore(index_name, key):
+    kvstore = RedisKVStore(REDIS_URL_KV)
+    try:
+        kvstore.delete(key, index_name)
+        if logflag:
+            logger.info(f"[ drop record ] record {key} deleted")
+        return True
+    except Exception as e:
+        if logflag:
+            logger.info(f"[ drop record ] record {key} delete failed: {e}")
+        return False
+
+def remove_company_from_list(company):
+    kvstore= RedisKVStore(REDIS_URL_KV)
+    company_list = get_company_list()
+    try:
+        company_list.remove(company)
+        kvstore.put("company", {"company": company_list}, "company_list")
+        if logflag:
+            logger.info(f"[ remove company ] company {company} removed from company list")
+        return True
+    except Exception as e:
+        if logflag:
+            logger.info(f"[ remove company ] company {company} remove failed: {e}")
+        return False
+    
+
 async def ingest_financial_data(filename: str, doc_id: str):
     """
     1 vector store - multiple collections: chunks/tables (embeddings for summaries), doc_titles
@@ -180,12 +220,22 @@ async def ingest_financial_data(filename: str, doc_id: str):
     file_ids = []
 
     conv_res, full_doc, metadata = parse_doc_and_extract_metadata(filename)
+    if not metadata:
+        raise HTTPException(status_code=400, detail="Failed to extract metadata from the document.")
 
-    if "https://" in filename:
+    if not filename.endswith(".pdf"):
         full_doc = post_process_html(full_doc, metadata["doc_title"])
 
     # save company name
     metadata = save_company_name(metadata)
+
+    # save file source info
+    file_existed = save_file_source(filename, metadata)
+    if file_existed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Uploaded file {filename} already exists. Please upload a different file.",
+        )
 
     # save full doc
     save_full_doc(full_doc, metadata)
@@ -349,159 +399,64 @@ class OpeaRedisDataprepFinance(OpeaComponent):
         raise HTTPException(status_code=400, detail="Must provide either a file or a string list.")
 
     async def get_files(self):
-        """Get file structure from redis database in the format of
-        {
-            "name": "File Name",
-            "id": "File Name",
-            "type": "File",
-            "parent": "",
-        }"""
+        """Get file source names"""
 
         if logflag:
-            logger.info("[ redis get ] start to get file structure")
+            logger.info("[ redis get ] start to get filenames of all uploaded files")
 
-        offset = 0
         file_list = []
-
-        # check index existence
-        res = check_index_existance(self.key_index_client)
-        if not res:
+        try:
+            kvstore = RedisKVStore(REDIS_URL_KV)
+            file_source_dict = kvstore.get_all("file_source")
+            for idx in file_source_dict:
+                company_docs = file_source_dict[idx]
+                file_list.extend(company_docs["source"])
             if logflag:
-                logger.info(f"[ redis get ] index {KEY_INDEX_NAME} does not exist")
-            return file_list
-
-        while True:
-            response = self.client.execute_command(
-                "FT.SEARCH", KEY_INDEX_NAME, "*", "LIMIT", offset, offset + SEARCH_BATCH_SIZE
-            )
-            # no doc retrieved
-            if len(response) < 2:
-                break
-            file_list = format_search_results(response, file_list)
-            offset += SEARCH_BATCH_SIZE
-            # last batch
-            if (len(response) - 1) // 2 < SEARCH_BATCH_SIZE:
-                break
-        if logflag:
-            logger.info(f"[get] final file_list: {file_list}")
+                logger.info(f"[ redis get ] Successfully get files: {file_list}")
+        except:
+            if logflag:
+                logger.info(f"[ redis get ] Fail to get files.")
+            raise HTTPException(status_code=500, detail="Fail to get files.")
         return file_list
 
     async def delete_files(self, file_path: str = Body(..., embed=True)):
-        """Delete file according to `file_path`.
+        """Delete file related to `file_path` - company name.
 
         `file_path`:
-            - specific file path (e.g. /path/to/file.txt)
-            - "all": delete all files uploaded
+            - specific comapny name: delete all files related to the company
         """
         if logflag:
-            logger.info(f"[ redis delete ] delete files: {file_path}")
+            logger.info(f"[ redis delete ] delete files related to: {file_path}")
 
-        # delete all uploaded files
-        if file_path == "all":
+        company_list = get_company_list()
+        company = file_path.upper()
+        if company not in company_list:
             if logflag:
-                logger.info("[ redis delete ] delete all files")
-
-            # drop index KEY_INDEX_NAME
-            if check_index_existance(self.key_index_client):
-                try:
-                    assert drop_index(index_name=KEY_INDEX_NAME)
-                except Exception as e:
-                    if logflag:
-                        logger.info(f"[ redis delete ] {e}. Fail to drop index {KEY_INDEX_NAME}.")
-                    raise HTTPException(status_code=500, detail=f"Fail to drop index {KEY_INDEX_NAME}.")
-            else:
-                logger.info(f"[ redis delete ] Index {KEY_INDEX_NAME} does not exits.")
-
-            # drop index INDEX_NAME
-            if check_index_existance(self.data_index_client):
-                try:
-                    assert drop_index(index_name=INDEX_NAME)
-                except Exception as e:
-                    if logflag:
-                        logger.info(f"[ redis delete ] {e}. Fail to drop index {INDEX_NAME}.")
-                    raise HTTPException(status_code=500, detail=f"Fail to drop index {INDEX_NAME}.")
-            else:
-                if logflag:
-                    logger.info(f"[ redis delete ] Index {INDEX_NAME} does not exits.")
-
-            # delete files on local disk
-            try:
-                remove_folder_with_ignore(upload_folder)
-            except Exception as e:
-                if logflag:
-                    logger.info(f"[ redis delete ] {e}. Fail to delete {upload_folder}.")
-                raise HTTPException(status_code=500, detail=f"Fail to delete {upload_folder}.")
-
-            if logflag:
-                logger.info("[ redis delete ] successfully delete all files.")
-            create_upload_folder(upload_folder)
-            if logflag:
-                logger.info({"status": True})
-            return {"status": True}
-
-        delete_path = Path(upload_folder + "/" + encode_filename(file_path))
-        if logflag:
-            logger.info(f"[ redis delete ] delete_path: {delete_path}")
-
-        # partially delete files
-        doc_id = "file:" + encode_filename(file_path)
-        logger.info(f"[ redis delete ] doc id: {doc_id}")
-
-        # determine whether this file exists in db KEY_INDEX_NAME
+                logger.info(f"[ redis delete ] Company {file_path} does not exists.")
+            raise HTTPException(status_code=404, 
+                                detail=f"Company {file_path} does not exists. Please choose from the following list {company_list}.")
+        
+        # delete files related to the company
+        # delete chunks_{company} and tables_{company} from vector store
+        # delete full_doc_{company} from kv store
+        # delete doc_titles_{company} from kv store
+        # delete {company} from file_source in kv store
         try:
-            key_ids = search_by_id(self.key_index_client, doc_id).key_ids
-        except Exception as e:
+            drop_index(index_name=f"chunks_{company}")
+            drop_index(index_name=f"tables_{company}")
+            drop_index(index_name=f"doc_titles_{company}")
+            drop_index_from_kvstore(index_name=f"chunks_{company}")
+            drop_index_from_kvstore(index_name=f"tables_{company}")
+            drop_index_from_kvstore(index_name=f"full_doc_{company}")
+            drop_record_from_kvstore(index_name="file_source", key=company)
+            remove_company_from_list(company)
+            
             if logflag:
-                logger.info(f"[ redis delete ] {e}, File {file_path} does not exists.")
-            raise HTTPException(
-                status_code=404, detail=f"File not found in db {KEY_INDEX_NAME}. Please check file_path."
-            )
-        file_ids = key_ids.split("#")
-
-        # delete file keys id in db KEY_INDEX_NAME
-        try:
-            assert delete_by_id(self.key_index_client, doc_id)
-        except Exception as e:
-            if logflag:
-                logger.info(f"[ redis delete ] {e}. File {file_path} delete failed for db {KEY_INDEX_NAME}.")
-            raise HTTPException(status_code=500, detail=f"File {file_path} delete failed for key index.")
-
-        # delete file content in db INDEX_NAME
-        for file_id in file_ids:
-            # determine whether this file exists in db INDEX_NAME
-            try:
-                search_by_id(self.data_index_client, file_id)
-            except Exception as e:
-                if logflag:
-                    logger.info(f"[ redis delete ] {e}. File {file_path} does not exists.")
-                raise HTTPException(
-                    status_code=404, detail=f"File not found in db {INDEX_NAME}. Please check file_path."
-                )
-
-            # delete file content
-            try:
-                assert delete_by_id(self.data_index_client, file_id)
-            except Exception as e:
-                if logflag:
-                    logger.info(f"[ redis delete ] {e}. File {file_path} delete failed for db {INDEX_NAME}")
-                raise HTTPException(status_code=500, detail=f"File {file_path} delete failed for index.")
-
-        # local file does not exist (restarted docker container)
-        if not delete_path.exists():
-            if logflag:
-                logger.info(f"[ redis delete ] File {file_path} not saved locally.")
+                logger.info(f"[ redis delete ] Successfully delete files related to company {file_path}")
             return {"status": True}
-
-        # delete local file
-        if delete_path.is_file():
-            # delete file on local disk
-            delete_path.unlink()
+        except:
             if logflag:
-                logger.info(f"[ redis delete ] File {file_path} deleted successfully.")
-            return {"status": True}
+                logger.info(f"[ redis delete ] Fail to delete files related to company {file_path}.")
+            raise HTTPException(status_code=500, detail=f"Fail to delete files related to company {file_path}.")
 
-        # delete folder
-        else:
-            if logflag:
-                logger.info(f"[ redis delete ] Delete folder {file_path} is not supported for now.")
-            raise HTTPException(status_code=404, detail=f"Delete folder {file_path} is not supported for now.")
+        

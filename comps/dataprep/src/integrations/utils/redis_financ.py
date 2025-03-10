@@ -7,18 +7,18 @@ import os
 import json
 import uuid
 from tqdm import tqdm
-from comps.dataprep.src.integrations.utils.redis_kv import RedisKVStore
-from comps import CustomLogger
-logger = CustomLogger("redis_dataprep_finance_data")
-# try: 
-#     from comps.dataprep.src.integrations.utils.redis_kv import RedisKVStore
-#     from comps import CustomLogger
-#     logger = CustomLogger("redis_dataprep_finance_data")
-# except:
-#     from redis_kv import RedisKVStore
-#     import logging
-#     logger = logging.getLogger(__name__)
-#     logging.basicConfig(filename='test.log', level=logging.INFO)
+# from comps.dataprep.src.integrations.utils.redis_kv import RedisKVStore
+# from comps import CustomLogger
+# logger = CustomLogger("redis_dataprep_finance_data")
+try: 
+    from comps.dataprep.src.integrations.utils.redis_kv import RedisKVStore
+    from comps import CustomLogger
+    logger = CustomLogger("redis_dataprep_finance_data")
+except:
+    from .redis_kv import RedisKVStore
+    import logging
+    logger = logging.getLogger(__name__)
+    logging.basicConfig(filename='test.log', level=logging.INFO)
 
 
 # Embedding model
@@ -168,7 +168,6 @@ def generate_metadata(full_doc):
     for chunk in chunks[:10]:
         prompt = METADATA_PROMPT.format(document=chunk)
         metadata = generate_answer(prompt)
-        print("LLM extracted metadata: ", metadata)
         metadata = parse_metadata_json(metadata)
         if metadata:
             if metadata["company"] and metadata["year"]:
@@ -182,6 +181,12 @@ def generate_metadata(full_doc):
         for k, v in final_metadata.items():
             if isinstance(v, str):
                 final_metadata[k] = v.upper()
+
+        title = f"{final_metadata['company']} {final_metadata['year']} {final_metadata['quarter']} {final_metadata['doc_type']}"
+        company_year_quarter = f"{final_metadata['company']}_{final_metadata['year']}_{final_metadata['quarter']}"
+        final_metadata["doc_title"] = title
+        final_metadata["company_year"]= f"{final_metadata['company']}_{final_metadata['year']}"
+        final_metadata["company_year_quarter"] = company_year_quarter
 
         for k, v in final_metadata.items():   
             logger.info(f"{k}: {v}")
@@ -205,6 +210,31 @@ def save_full_doc(full_doc: str, metadata: dict):
     doc_length = len(tokenizer.encode(full_doc))
     kvstore.put(metadata["doc_title"], {"full_doc": full_doc, "doc_length":doc_length, **metadata}, index_name)
     return None 
+
+def save_file_source(filename: str, metadata: dict):
+    # this should be done after saving company name
+    # return True if file source already in file source list
+    # return False if file source did not existed and added to file source list
+    logger.info("Saving file source....")
+    kvstore = RedisKVStore(redis_uri=REDIS_URL_KV)
+    index_name="file_source"
+    # get existing file source list from KV store for this company
+    file_source_dict = kvstore.get(metadata["company"], index_name)
+    if file_source_dict:
+        file_source_list = file_source_dict["source"]
+        logger.info(f"Found existing file source list: {file_source_list}")
+        # check if filename already in file source list
+        if filename in file_source_list:
+            logger.info("File source already in file source list.")
+            return True
+        else:
+            file_source_list.append(filename)
+            kvstore.put(metadata["company"], {"source": file_source_list}, index_name)
+            logger.info(f"Added {filename} to file source list.")
+    else:
+        logger.info("No existing file source list found. Creating new list.")
+        kvstore.put(metadata["company"], {"source": [filename]}, index_name)
+    return False
 
 
 def save_company_name(metadata: dict):
@@ -263,7 +293,8 @@ def get_index_name(doc_type: str, metadata: dict):
 
 def save_doc_title(doc_title: str, metadata: dict):
     logger.info("Saving doc title....")
-    vector_store = get_vectorstore("titles")
+    index_name = get_index_name("titles", metadata)
+    vector_store = get_vectorstore(index_name)
     keys = vector_store.add_texts([doc_title], [metadata])
     return keys
 
@@ -280,6 +311,8 @@ def parse_doc_and_extract_metadata(filename: str):
     # get doc title and metadata with llm
     logger.info("[parse_doc_and_extract_metadata] Extracting metadata....")
     metadata = generate_metadata(full_doc)
+
+    metadata["source"] = filename
     return conv_res, full_doc, metadata
 
 

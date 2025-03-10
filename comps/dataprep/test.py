@@ -42,7 +42,15 @@ def test_delete(url, filename):
     except requests.exceptions.RequestException as e:
         print("An error occurred:", e)
 
-
+def test_get(url):
+    proxies = {"http": ""}
+    try:
+        resp = requests.post(url=url, proxies=proxies)
+        print(resp.text)
+        resp.raise_for_status()  # Raise an exception for unsuccessful HTTP status codes
+        print("Request successful!")
+    except requests.exceptions.RequestException as e:
+        print("An error occurred:", e)
 
 if __name__ == "__main__":
     import argparse
@@ -54,13 +62,32 @@ if __name__ == "__main__":
     if args.test_option == "pdf":
         test_pdf(url)
     elif args.test_option == "html":
-        link_list = ["https://investors.3m.com/financials/sec-filings/content/0000066740-24-000101/0000066740-24-000101.pdf",
+        # "https://investors.3m.com/financials/sec-filings/content/0000066740-24-000101/0000066740-24-000101.pdf",
+        link_list = ["https://www.fool.com/earnings/call-transcripts/2025/03/06/costco-wholesale-cost-q2-2025-earnings-call-transc/",
                      "https://www.fool.com/earnings/call-transcripts/2025/03/07/gap-gap-q4-2024-earnings-call-transcript/"]
         test_html(url, link_list)
     elif args.test_option == "delete":
         url = "http://localhost:6007/v1/dataprep/delete"
-        filename = "https://investors.3m.com/financials/sec-filings/content/0000066740-24-000101/0000066740-24-000101.pdf"
+        filename = "Gap"
         test_delete(url, filename)
+    elif args.test_option == "get":
+        # url = "http://localhost:6007/v1/dataprep/get"
+        # test_get(url)
+        from src.integrations.utils.redis_kv import RedisKVStore
+        from src.integrations.utils.redis_financ import REDIS_URL_KV
+        kvstore = RedisKVStore(REDIS_URL_KV)
+        file_source_dict = kvstore.get_all("file_source")
+        file_list = []
+        for idx in file_source_dict:
+            company_docs = file_source_dict[idx]
+            file_list.extend(company_docs["source"])
+        print(file_list)
 
+    elif args.test_option == "company_list":
+        from src.integrations.utils.redis_kv import RedisKVStore
+        from src.integrations.utils.redis_financ import REDIS_URL_KV, get_company_list
+        kvstore = RedisKVStore(REDIS_URL_KV)
+        company_list = get_company_list()
+        print(company_list)
     else:
         raise ValueError("Invalid test_option value. Please use pdf or html")
