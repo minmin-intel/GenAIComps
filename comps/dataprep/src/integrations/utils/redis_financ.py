@@ -15,7 +15,7 @@ try:
     from comps import CustomLogger
     logger = CustomLogger("redis_dataprep_finance_data")
 except:
-    from .redis_kv import RedisKVStore
+    from redis_kv import RedisKVStore
     import logging
     logger = logging.getLogger(__name__)
     logging.basicConfig(filename='test.log', level=logging.INFO)
@@ -478,7 +478,7 @@ def convert_docs(docs):
 
 def bm25_search(query, metadata, company, doc_type="chunks", k=10):
     collection_name = f"{doc_type}_{company}"
-    logger.info("Collection name: ", collection_name)
+    logger.info(f"Collection name: {collection_name}")
 
     docs = get_docs_matching_metadata(metadata, collection_name)
 
@@ -580,8 +580,8 @@ def get_content(doc):
         result = kvstore.get(doc_id, collection_name)
         content = result["content"]
     
-    logger.info(f"***Doc Metadata:\n{doc.metadata}")
-    logger.info(f"***Content: {content[:100]}...")
+    # logger.info(f"***Doc Metadata:\n{doc.metadata}")
+    # logger.info(f"***Content: {content[:100]}...")
 
     return content
 
@@ -657,7 +657,7 @@ def get_context_bm25_llm(query, company, year, quarter = ""):
 
     # get unique results
     context = get_unique_docs(chunks+tables)
-    logger.info("Context:\n", context)
+    print("Context:\n", context)
 
     if context:
         query = f"{query} for {company} in {year} {quarter}"
@@ -704,14 +704,14 @@ def search_full_doc(query, company):
     if docs:
         doc = docs[0]
         doc_title = doc.page_content
-        logger.info(f"Most similar doc title: {doc_title}")
+        print(f"Most similar doc title: {doc_title}")
     
     kvstore= RedisKVStore(redis_uri=REDIS_URL_KV)
     doc = kvstore.get(doc_title, f"full_doc_{company}")
     content = doc["full_doc"]
     doc_length = doc["doc_length"]
-    logger.info(f"Doc length: {doc_length}")
-    logger.info(f"Full doc content: {content[:100]}...")
+    print(f"Doc length: {doc_length}")
+    print(f"Full doc content: {content[:100]}...")
     # once summary is done, can save to kvstore
     # first delete the old record
     # kvstore.delete(doc_title, f"full_doc_{company}")
@@ -759,31 +759,17 @@ if __name__ == "__main__":
 
     if args.option == "retrieve":
         # # retrieval
-        company="PROGRESSIVE"
+        company="Gap"
         year="2024"
         quarter="Q4"
         collection_name=f"chunks_{company}"
         search_metadata = ("company", company)
-        # docs = get_docs_matching_metadata(search_metadata, collection_name)
-        # for doc in docs:
-        #     content = doc["content"]
-        #     logger.info(content[:100])
-        #     logger.info("="*50)
-            
-        # bm25_search("revenue", search_metadata, company, k=5)
-        # resp = get_context_bm25_llm("revenue", company, year, quarter)
-        # logger.info("***Response:\n", resp)
-        # vector_store = get_vectorstore(collection_name)
-        # k = 2
-        # query = "revenue"
-        # similarity_search(vector_store, k, query, company, year, quarter)
-
-        logger.info("testing company list")
-        company_list = get_company_list()
-        logger.info(company_list)
-        save_company_name(metadata={"company":"FAKE COMPANY"})  
-        logger.info("="*50)
         
-        logger.info("testing retrieve full doc")
-        search_full_doc("2024 earning call", "PROGRESSIVE")
+        resp = get_context_bm25_llm("revenue", company, year, quarter)
+        print("***Response:\n", resp)
+
+        
+        # print("testing retrieve full doc")
+        # query = f"{company} {year} {quarter} earning call"
+        # search_full_doc(query, company)
         

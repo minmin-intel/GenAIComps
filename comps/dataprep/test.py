@@ -68,20 +68,11 @@ if __name__ == "__main__":
         test_html(url, link_list)
     elif args.test_option == "delete":
         url = "http://localhost:6007/v1/dataprep/delete"
-        filename = "Gap"
+        filename = "Costco Wholesale"
         test_delete(url, filename)
     elif args.test_option == "get":
-        # url = "http://localhost:6007/v1/dataprep/get"
-        # test_get(url)
-        from src.integrations.utils.redis_kv import RedisKVStore
-        from src.integrations.utils.redis_financ import REDIS_URL_KV
-        kvstore = RedisKVStore(REDIS_URL_KV)
-        file_source_dict = kvstore.get_all("file_source")
-        file_list = []
-        for idx in file_source_dict:
-            company_docs = file_source_dict[idx]
-            file_list.extend(company_docs["source"])
-        print(file_list)
+        url = "http://localhost:6007/v1/dataprep/get"
+        test_get(url)
 
     elif args.test_option == "company_list":
         from src.integrations.utils.redis_kv import RedisKVStore

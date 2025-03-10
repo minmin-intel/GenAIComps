@@ -74,61 +74,61 @@ def get_boolean_env_var(var_name, default_value=False):
 redis_pool = redis.ConnectionPool.from_url(REDIS_URL_VECTOR)
 
 
-def check_index_existance(client):
-    if logflag:
-        logger.info(f"[ check index existence ] checking {client}")
-    try:
-        results = client.search("*")
-        if logflag:
-            logger.info(f"[ check index existence ] index of client exists: {client}")
-        return results
-    except Exception as e:
-        if logflag:
-            logger.info(f"[ check index existence ] index does not exist: {e}")
-        return None
+# def check_index_existance(client):
+#     if logflag:
+#         logger.info(f"[ check index existence ] checking {client}")
+#     try:
+#         results = client.search("*")
+#         if logflag:
+#             logger.info(f"[ check index existence ] index of client exists: {client}")
+#         return results
+#     except Exception as e:
+#         if logflag:
+#             logger.info(f"[ check index existence ] index does not exist: {e}")
+#         return None
 
 
-def create_index(client, index_name: str = KEY_INDEX_NAME):
-    if logflag:
-        logger.info(f"[ create index ] creating index {index_name}")
-    try:
-        definition = IndexDefinition(index_type=IndexType.HASH, prefix=["file:"])
-        client.create_index((TextField("file_name"), TextField("key_ids")), definition=definition)
-        if logflag:
-            logger.info(f"[ create index ] index {index_name} successfully created")
-    except Exception as e:
-        if logflag:
-            logger.info(f"[ create index ] fail to create index {index_name}: {e}")
-        return False
-    return True
+# def create_index(client, index_name: str = KEY_INDEX_NAME):
+#     if logflag:
+#         logger.info(f"[ create index ] creating index {index_name}")
+#     try:
+#         definition = IndexDefinition(index_type=IndexType.HASH, prefix=["file:"])
+#         client.create_index((TextField("file_name"), TextField("key_ids")), definition=definition)
+#         if logflag:
+#             logger.info(f"[ create index ] index {index_name} successfully created")
+#     except Exception as e:
+#         if logflag:
+#             logger.info(f"[ create index ] fail to create index {index_name}: {e}")
+#         return False
+#     return True
 
 
-def store_by_id(client, key, value):
-    if logflag:
-        logger.info(f"[ store by id ] storing ids of {key}")
-    try:
-        client.add_document(doc_id=key, file_name=key, key_ids=value)
-        if logflag:
-            logger.info(f"[ store by id ] store document success. id: file:{key}")
-    except Exception as e:
-        if logflag:
-            logger.info(f"[ store by id ] fail to store document file:{key}: {e}")
-        return False
-    return True
+# def store_by_id(client, key, value):
+#     if logflag:
+#         logger.info(f"[ store by id ] storing ids of {key}")
+#     try:
+#         client.add_document(doc_id=key, file_name=key, key_ids=value)
+#         if logflag:
+#             logger.info(f"[ store by id ] store document success. id: file:{key}")
+#     except Exception as e:
+#         if logflag:
+#             logger.info(f"[ store by id ] fail to store document file:{key}: {e}")
+#         return False
+#     return True
 
 
-def search_by_id(client, doc_id):
-    if logflag:
-        logger.info(f"[ search by id ] searching docs of {doc_id}")
-    try:
-        results = client.load_document(doc_id)
-        if logflag:
-            logger.info(f"[ search by id ] search success of {doc_id}: {results}")
-        return results
-    except Exception as e:
-        if logflag:
-            logger.info(f"[ search by id ] fail to search docs of {doc_id}: {e}")
-        return None
+# def search_by_id(client, doc_id):
+#     if logflag:
+#         logger.info(f"[ search by id ] searching docs of {doc_id}")
+#     try:
+#         results = client.load_document(doc_id)
+#         if logflag:
+#             logger.info(f"[ search by id ] search success of {doc_id}: {results}")
+#         return results
+#     except Exception as e:
+#         if logflag:
+#             logger.info(f"[ search by id ] fail to search docs of {doc_id}: {e}")
+#         return None
 
 
 def drop_index(index_name, redis_url=REDIS_URL_VECTOR):
@@ -145,32 +145,47 @@ def drop_index(index_name, redis_url=REDIS_URL_VECTOR):
     return True
 
 
-def delete_by_id(client, id):
-    try:
-        assert client.delete_document(id)
-        if logflag:
-            logger.info(f"[ delete by id ] delete id success: {id}")
-    except Exception as e:
-        if logflag:
-            logger.info(f"[ delete by id ] fail to delete ids {id}: {e}")
-        return False
-    return True
+# def delete_by_id(client, id):
+#     try:
+#         assert client.delete_document(id)
+#         if logflag:
+#             logger.info(f"[ delete by id ] delete id success: {id}")
+#     except Exception as e:
+#         if logflag:
+#             logger.info(f"[ delete by id ] fail to delete ids {id}: {e}")
+#         return False
+#     return True
 
-def save_file_ids_to_filekey_index(file_name, file_ids):
-    print(file_name)
-    # store file_ids into index file-keys
-    r = redis.Redis(connection_pool=redis_pool)
-    client = r.ft(KEY_INDEX_NAME)
-    if not check_index_existance(client):
-        assert create_index(client)
+# def save_file_ids_to_filekey_index(file_name, file_ids):
+#     print(file_name)
+#     # store file_ids into index file-keys
+#     r = redis.Redis(connection_pool=redis_pool)
+#     client = r.ft(KEY_INDEX_NAME)
+#     if not check_index_existance(client):
+#         assert create_index(client)
 
-    try:
-        assert store_by_id(client, key=file_name, value="#".join(file_ids))
-    except Exception as e:
-        if logflag:
-            logger.info(f"[ redis ingest chunks ] {e}. Fail to store chunks of file {file_name}.")
-        raise HTTPException(status_code=500, detail=f"Fail to store chunks of file {file_name}.")
+#     try:
+#         assert store_by_id(client, key=file_name, value="#".join(file_ids))
+#     except Exception as e:
+#         if logflag:
+#             logger.info(f"[ redis ingest chunks ] {e}. Fail to store chunks of file {file_name}.")
+#         raise HTTPException(status_code=500, detail=f"Fail to store chunks of file {file_name}.")
 
+
+def get_all_existing_files():
+    file_list = []
+    kvstore = RedisKVStore(REDIS_URL_KV)
+    file_source_dict = kvstore.get_all("file_source")
+    for idx in file_source_dict:
+        company_docs = file_source_dict[idx]
+        file_list.extend(company_docs["source"])
+    return file_list
+
+def check_file_existance(file_name):
+    file_list = get_all_existing_files()
+    if file_name in file_list:
+        return True
+    return False
 
 def drop_index_from_kvstore(index_name):
     redis_pool = redis.ConnectionPool.from_url(REDIS_URL_KV)
@@ -212,7 +227,7 @@ def remove_company_from_list(company):
         return False
     
 
-async def ingest_financial_data(filename: str, doc_id: str):
+async def ingest_financial_data(filename: str):
     """
     1 vector store - multiple collections: chunks/tables (embeddings for summaries), doc_titles
     1 kv store - multiple collections: full doc, chunks, tables
@@ -229,7 +244,7 @@ async def ingest_financial_data(filename: str, doc_id: str):
     # save company name
     metadata = save_company_name(metadata)
 
-    # save file source info
+    # save file source info and check if file already exists
     file_existed = save_file_source(filename, metadata)
     if file_existed:
         raise HTTPException(
@@ -252,7 +267,7 @@ async def ingest_financial_data(filename: str, doc_id: str):
     # process tables and save
     keys = process_tables(conv_res, metadata)
     file_ids.extend(keys)
-    save_file_ids_to_filekey_index(doc_id, file_ids)
+    # save_file_ids_to_filekey_index(doc_id, file_ids)
     
 
 @OpeaComponentRegistry.register("OPEA_DATAPREP_REDIS_FIANANCE")
@@ -333,32 +348,20 @@ class OpeaRedisDataprepFinance(OpeaComponent):
                 files = [files]
             uploaded_files = []
 
-            for file in files:
-                print(file.filename)
+            for file in files:                
                 if not file.filename.lower().endswith(".pdf"):
                     raise HTTPException(status_code=400, detail="Only PDF files are supported.")
-                encode_file = encode_filename(file.filename)
-                doc_id = "file:" + encode_file
-                if logflag:
-                    logger.info(f"[ redis ingest ] processing file {doc_id}")
-
-                # check whether the file already exists
-                key_ids = None
-                try:
-                    key_ids = search_by_id(self.key_index_client, doc_id).key_ids
-                    if logflag:
-                        logger.info(f"[ redis ingest] File {file.filename} already exists.")
-                except Exception as e:
-                    logger.info(f"[ redis ingest] File {file.filename} does not exist.")
-                if key_ids:
+                
+                if check_file_existance(file.filename):
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Uploaded file {file.filename} already exists. Please change file name.",
+                        detail=f"Uploaded file {file.filename} already exists. Please upload a different file.",
                     )
-
+                
+                encode_file = encode_filename(file.filename)
                 save_path = upload_folder + encode_file
                 await save_content_to_local_disk(save_path, file)
-                await ingest_financial_data(save_path, doc_id)
+                await ingest_financial_data(save_path)
                 uploaded_files.append(save_path)
                 if logflag:
                     logger.info(f"[ redis ingest] Successfully saved file {save_path}")
@@ -375,23 +378,15 @@ class OpeaRedisDataprepFinance(OpeaComponent):
             for link in link_list:
                 if not link.startswith("http"):
                     raise HTTPException(status_code=400, detail=f"Link {link} is not a valid URL.")
-                doc_id = "file:" + link
-                if logflag:
-                    logger.info(f"[ redis ingest] processing link {doc_id}")
-
-                # check whether the link file already exists
-                key_ids = None
-                try:
-                    key_ids = search_by_id(self.key_index_client, doc_id).key_ids
-                    if logflag:
-                        logger.info(f"[ redis ingest] Link {link} already exists.")
-                except Exception as e:
-                    logger.info(f"[ redis ingest] Link {link} does not exist. Keep storing.")
-                if key_ids:
+                if check_file_existance(link):
                     raise HTTPException(
-                        status_code=400, detail=f"Uploaded link {link} already exists. Please change another link."
+                        status_code=400,
+                        detail=f"Uploaded link {link} already exists. Please upload a different link."
                     )
-                await ingest_financial_data(link, doc_id)
+                if logflag:
+                    logger.info(f"[ redis ingest] processing link {link}")
+
+                await ingest_financial_data(link)
             if logflag:
                 logger.info(f"[ redis ingest] Successfully saved link list {link_list}")
             return {"status": 200, "message": "Data preparation succeeded"}
@@ -404,13 +399,8 @@ class OpeaRedisDataprepFinance(OpeaComponent):
         if logflag:
             logger.info("[ redis get ] start to get filenames of all uploaded files")
 
-        file_list = []
         try:
-            kvstore = RedisKVStore(REDIS_URL_KV)
-            file_source_dict = kvstore.get_all("file_source")
-            for idx in file_source_dict:
-                company_docs = file_source_dict[idx]
-                file_list.extend(company_docs["source"])
+            file_list = get_all_existing_files()
             if logflag:
                 logger.info(f"[ redis get ] Successfully get files: {file_list}")
         except:
@@ -444,7 +434,7 @@ class OpeaRedisDataprepFinance(OpeaComponent):
         try:
             drop_index(index_name=f"chunks_{company}")
             drop_index(index_name=f"tables_{company}")
-            drop_index(index_name=f"doc_titles_{company}")
+            drop_index(index_name=f"titles_{company}")
             drop_index_from_kvstore(index_name=f"chunks_{company}")
             drop_index_from_kvstore(index_name=f"tables_{company}")
             drop_index_from_kvstore(index_name=f"full_doc_{company}")
