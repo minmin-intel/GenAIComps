@@ -429,7 +429,11 @@ def get_company_name_in_kb(company, company_list):
     if "NONE" in response.upper():
         return f"Cannot find {company} in knowledge base."
     else:
-        return response.strip("{}").upper()
+        try:
+            company = response.split("{")[1].split("}")[0]
+            return company
+        except:
+            return "Fail to parse company name."
 
 def get_docs_matching_metadata(metadata, collection_name):
     """
@@ -697,7 +701,8 @@ def search_full_doc(query, company):
         return company
     
     # search most similar doc title
-    index_name = "titles"
+    print(f"Searching most similar doc title for {company}....")
+    index_name = f"titles_{company}"
     vector_store = get_vectorstore_titles(index_name)
     k = 1
     docs = vector_store.similarity_search(query, k=k)
@@ -759,17 +764,17 @@ if __name__ == "__main__":
 
     if args.option == "retrieve":
         # # retrieval
-        company="Gap"
+        company="costco"
         year="2024"
         quarter="Q4"
         collection_name=f"chunks_{company}"
         search_metadata = ("company", company)
         
-        resp = get_context_bm25_llm("revenue", company, year, quarter)
-        print("***Response:\n", resp)
+        # resp = get_context_bm25_llm("revenue", company, year, quarter)
+        # print("***Response:\n", resp)
 
         
-        # print("testing retrieve full doc")
-        # query = f"{company} {year} {quarter} earning call"
-        # search_full_doc(query, company)
+        print("testing retrieve full doc")
+        query = f"{company} {year} {quarter} earning call"
+        search_full_doc(query, company)
         
