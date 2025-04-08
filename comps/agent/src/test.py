@@ -18,10 +18,10 @@ def get_test_data(args):
             # "Considering the data in the balance sheet, what is Block's (formerly known as Square) FY2016 working capital ratio? Define working capital ratio as total current assets divided by total current liabilities. Round your answer to two decimal places.",
             # "We need to calculate a financial metric by using information only provided within the balance sheet. Please answer the following question: what is Boeing's year end FY2018 net property, plant, and equipment (in USD millions)?",
             "What is Coca Cola's FY2021 COGS % margin? Calculate what was asked by utilizing the line items clearly shown in the income statement.",
-            "Is CVS Health a capital-intensive business based on FY2022 data?",
-            "What drove gross margin change as of FY2022 for JnJ? If gross margin is not a useful metric for a company like this, then please state that and explain why.",
-            "In 2022 Q2, which of JPM's business segments had the highest net income?",
-            "Which region had the Highest EBITDAR Contribution for MGM during FY2022?",
+            # "Is CVS Health a capital-intensive business based on FY2022 data?",
+            # "What drove gross margin change as of FY2022 for JnJ? If gross margin is not a useful metric for a company like this, then please state that and explain why.",
+            # "In 2022 Q2, which of JPM's business segments had the highest net income?",
+            # "Which region had the Highest EBITDAR Contribution for MGM during FY2022?",
         ]
 
         df = pd.DataFrame({"question": test_questions})
@@ -44,7 +44,7 @@ def test_agent_local(args):
 
     df = get_test_data(args)
 
-    df = df.loc[df["agent_response"]=="Connection error."]
+    # df = df.loc[df["agent_response"]=="Connection error."]
     print(df.shape)
     # print(df.columns)
     #df = df.loc[df["company"] == "Amcor"]

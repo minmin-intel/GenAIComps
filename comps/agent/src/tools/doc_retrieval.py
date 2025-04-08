@@ -62,7 +62,18 @@ def parse_response(response):
     return company
 
 def generate_answer_with_llm(prompt):
-    llm_endpoint_url = "http://localhost:8086"
+    
+    api_token = os.getenv("TOGETHER_API_KEY", "EMPTY")
+    if api_token == "EMPTY":
+        # using vllm endpoint
+        llm_endpoint_url = "http://localhost:8086"
+        model = "meta-llama/Llama-3.3-70B-Instruct"
+    else:
+        # using together.ai endpoint
+        llm_endpoint_url="https://api.together.ai"
+        # model="meta-llama/Llama-4-Scout-17B-16E-Instruct"
+        model="meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"
+
     client = OpenAI(
         base_url=f"{llm_endpoint_url}/v1",
         api_key="token-abc123",
@@ -74,7 +85,7 @@ def generate_answer_with_llm(prompt):
     }
 
     completion = client.chat.completions.create(
-        model="meta-llama/Llama-3.3-70B-Instruct",
+        model=model,
         messages=[
             {"role": "user", "content": prompt}
         ],
