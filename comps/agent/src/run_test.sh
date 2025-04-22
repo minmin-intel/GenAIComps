@@ -4,8 +4,9 @@ filename=financebench_open_source.jsonl #difficult_questions.csv #
 # filedir=$WORKDIR/datasets/financebench/results/
 # filename=finqa_agent_v9_rest_rest_t0p5.csv
 
-output_filename=finqa_agent_v9_llama4_t0p5_test
+output_filename=finqa_agent_v9_llama4MavericFP8_t0p5_test
 output=$WORKDIR/datasets/financebench/results/$output_filename.json
+logfile=$WORKDIR/datasets/financebench/logs/$output_filename.log
 
 
 # agent cofig
@@ -15,9 +16,10 @@ output=$WORKDIR/datasets/financebench/results/$output_filename.json
 
 # together api
 # model="meta-llama/Llama-4-Scout-17B-16E-Instruct"
-model="meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"
+model="meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8"
+# model="meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"
 api_key=$TOGETHER_API_KEY
-llm_endpoint_url="https://api.together.ai"
+llm_endpoint="https://api.together.ai"
 
 temperature=0.5
 recursion_limit=15
@@ -36,7 +38,8 @@ python test.py \
     --max_new_tokens 4096 \
     --temperature $temperature \
     --timeout 600 \
-    --output $output \
-    --debug
+    --output $output | tee $logfile
+    
+    # --debug
     
     #| tee $WORKDIR/datasets/financebench/results/$output_filename.log

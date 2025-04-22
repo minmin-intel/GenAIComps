@@ -9,6 +9,7 @@ import traceback
 import pandas as pd
 import requests
 from integrations.utils import get_args
+import time
 
 
 
@@ -38,6 +39,14 @@ def get_test_data(args):
 
 def test_agent_local(args):
     from integrations.agent import instantiate_agent
+
+    print("--"*50)
+    print(f"Start time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}")
+    print("--"*50)
+    print(f"Testing with model endpoint: {args.llm_endpoint_url}")
+    print("--"*50)
+    print(f"Testing with model in agentic setting: {args.model}")
+    print("--"*50)
 
     agent = instantiate_agent(args)
     config = {"recursion_limit": args.recursion_limit}
@@ -79,6 +88,9 @@ def test_agent_local(args):
     df["agent_response"] = agent_outputs
     csv_output = args.output.replace(".json", ".csv")
     df.to_csv(csv_output, index=False)
+    print("--"*50)
+    print(f"End time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}")
+    print("--"*50)
 
 
 

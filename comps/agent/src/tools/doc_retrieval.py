@@ -22,14 +22,14 @@ from openai import OpenAI
 
 
 WORKDIR=os.getenv('WORKDIR')
-DATAPATH=os.path.join(WORKDIR, 'datasets/financebench_data/dataprep/')
+DATAPATH=os.path.join(WORKDIR, 'datasets/financebench/dataprep/')
 
 model = "BAAI/bge-base-en-v1.5"
 embeddings = HuggingFaceEmbeddings(model_name=model)
 
 # reranker_model = HuggingFaceCrossEncoder(model_name="BAAI/bge-reranker-base")
 # compressor = CrossEncoderReranker(model=reranker_model, top_n=1)
-reranker_model = CrossEncoder("BAAI/bge-reranker-base")
+# reranker_model = CrossEncoder("BAAI/bge-reranker-base")
 
 def get_company_mapping():
     company_mapping = {}
@@ -72,11 +72,12 @@ def generate_answer_with_llm(prompt):
         # using together.ai endpoint
         llm_endpoint_url="https://api.together.ai"
         # model="meta-llama/Llama-4-Scout-17B-16E-Instruct"
-        model="meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"
+        model = "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8"
+        # model="meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"
 
     client = OpenAI(
         base_url=f"{llm_endpoint_url}/v1",
-        api_key="token-abc123",
+        api_key=api_token,
     )
 
     params = {
