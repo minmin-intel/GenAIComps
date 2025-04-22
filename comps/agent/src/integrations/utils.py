@@ -49,6 +49,7 @@ def setup_hf_tgi_client(args):
 
 def setup_chat_model(args):
     from langchain_openai import ChatOpenAI
+    import os
 
     params = {
         "temperature": args.temperature,
@@ -57,9 +58,10 @@ def setup_chat_model(args):
         "streaming": args.stream,
     }
     if args.llm_engine == "vllm" or args.llm_engine == "tgi":
+        api_key = os.getenv("LLM_API_KEY", "EMPTY")
         openai_endpoint = f"{args.llm_endpoint_url}/v1"
         llm = ChatOpenAI(
-            openai_api_key="EMPTY",
+            openai_api_key=api_key,
             openai_api_base=openai_endpoint,
             model_name=args.model,
             request_timeout=args.timeout,
